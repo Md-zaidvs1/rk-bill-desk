@@ -1,20 +1,23 @@
 const CACHE_NAME = "rk-bill-desk-v1";
+// Only include files that actually exist in your 'dist' folder after build
 const ASSETS_TO_CACHE = [
   "/",
   "/index.html",
-  "/src/main.tsx",
-  "/src/App.tsx",
-  "/src/index.css",
   "/manifest.json"
 ];
 
 // Install Event: cache core app shell assets
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
+    caches.open(CACHE_NAME).then(async (cache) => {
       console.log("[Service Worker] Caching App Shell static assets...");
-      return cache.addAll(ASSETS_TO_CACHE);
-    }).then(() => self.skipWaiting())
+      try {
+        await cache.addAll(ASSETS_TO_CACHE);
+      } catch (err) {
+        console.warn("[Service Worker] Some assets failed to cache:", err);
+      }
+      return self.skipWaiting();
+    })
   );
 });
 
@@ -36,13 +39,12 @@ self.addEventListener("activate", (event) => {
 
 // Fetch Event: respond with cache-first strategy with network fallback
 self.addEventListener("fetch", (event) => {
-  // Only handle HTTP/HTTPS protocols
   if (!event.request.url.startsWith("http")) return;
 
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
-        // Return cached asset immediately, but trigger an async background update for fresh data (stale-while-revalidate)
+        // Return cached asset immediately, update in background
         fetch(event.request)
           .then((networkResponse) => {
             if (networkResponse && networkResponse.status === 200) {
@@ -51,13 +53,12 @@ self.addEventListener("fetch", (event) => {
               });
             }
           })
-          .catch(() => { /* silent ignore when offline */ });
+          .catch(() => { /* silent ignore */ });
         return cachedResponse;
       }
 
       // If not in cache, fallback to regular network request
       return fetch(event.request).then((networkResponse) => {
-        // Cache newly fetched assets dynamically
         if (networkResponse && networkResponse.status === 200 && event.request.method === "GET") {
           const responseClone = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => {
