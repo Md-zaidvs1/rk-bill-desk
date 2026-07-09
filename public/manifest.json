@@ -1,0 +1,22 @@
+{
+  "short_name": "RK Bill Desk",
+  "name": "RK Bill Desk - Dental Suite",
+  "description": "Progressive Web App for Dental Billing, Prescriptions, and ESC/POS Printing on iPad",
+  "icons": [
+    {
+      "src": "https://images.unsplash.com/photo-1629909613654-28e377c37b09?w=192&h=192&fit=crop&q=80",
+      "type": "image/jpeg",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://images.unsplash.com/photo-1629909613654-28e377c37b09?w=512&h=512&fit=crop&q=80",
+      "type": "image/jpeg",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#1e40af",
+  "theme_color": "#1e40af",
+  "display": "standalone",
+  "orientation": "portrait"
+}

@@ -1,0 +1,59 @@
+/* Screen Preview Container Layout Fixes */
+.thermal-receipt-scroller {
+  height: auto !important;
+  min-height: min-content !important;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: center;
+}
+
+/* Print media query targeted strictly at 80mm thermal roll widths */
+@media print {
+  /* Hide all standard UI structures, backdrops, sidebar headers, navigation, footers, and modal close buttons */
+  body, html, #root {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 80mm !important;
+  }
+
+  /* Hide elements with class 'no-print' */
+  .no-print,
+  .fixed,
+  nav,
+  header,
+  footer,
+  button,
+  .bg-black\/75 {
+    display: none !important;
+    background: none !important;
+    border: none !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+
+  /* Unhide only the receipt print-area, placing it directly at top-left of sheet */
+  #thermal-receipt-print-area {
+    display: block !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 80mm !important;
+    max-width: 80mm !important;
+    padding: 5mm 3mm 12mm 3mm !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+    font-family: 'Courier New', Courier, monospace !important;
+    font-size: 11px !important;
+    line-height: 1.35 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  /* Avoid splitting items or separators mid-procedure list */
+  .item-row, .divider, .totals-sec, .metadata-sec, .patient-sec, .footer-sec {
+    page-break-inside: avoid !important;
+  }
+}
