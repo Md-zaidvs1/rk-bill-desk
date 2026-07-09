@@ -37,23 +37,20 @@ class FallbackQueryBuilder {
   private orderCol: string | null = null;
   private orderAscending: boolean = true;
   private isSingle: boolean = false;
-  private updateValues: any = null;
-  private isDelete: boolean = false;
   private insertRows: any[] | null = null;
-  private limitCount: number | null = null;
 
   constructor(tableName: string) {
     this.tableName = tableName;
     this.data = getLocalStorageItem(`rk_fallback_${tableName}`, this.tableName === "settings" ? [DEFAULT_SETTINGS] : (this.tableName === "users" ? DEFAULT_USERS : []));
   }
 
-  select(f: string = "*") { return this; }
+  select(f: any) { return this; }
   eq(c: string, v: any) { this.filters.push({ col: c, val: v }); return this; }
   neq(c: string, v: any) { this.filters.push({ col: c, val: v, type: "neq" }); return this; }
   ilike(c: string, p: string) { this.filters.push({ col: c, val: p, type: "ilike" }); return this; }
   or(f: string) { this.filters.push({ col: "or", val: f, type: "or" }); return this; }
   order(c: string, o?: any) { this.orderCol = c; this.orderAscending = o?.ascending ?? true; return this; }
-  limit(n: number) { this.limitCount = n; return this; }
+  limit(n: number) { return this; }
   single() { this.isSingle = true; return this; }
 
   async execute() {
@@ -68,8 +65,8 @@ class FallbackQueryBuilder {
   }
   then(onf?: any, onr?: any) { return this.execute().then(onf, onr); }
   insert(r: any) { this.insertRows = Array.isArray(r) ? r : [r]; return this; }
-  update(v: any) { this.updateValues = v; return this; }
-  delete() { this.isDelete = true; return this; }
+  update(v: any) { return this; }
+  delete() { return this; }
 }
 
 class RobustQueryBuilder {
@@ -84,6 +81,16 @@ class RobustQueryBuilder {
 
   select(f: any) { if (this.realQB) this.realQB.select(f); this.fallbackQB.select(f); return this; }
   eq(c: any, v: any) { if (this.realQB) this.realQB.eq(c, v); this.fallbackQB.eq(c, v); return this; }
+  neq(c: any, v: any) { if (this.realQB) this.realQB.neq(c, v); this.fallbackQB.neq(c, v); return this; }
+  ilike(c: any, v: any) { if (this.realQB) this.realQB.ilike(c, v); this.fallbackQB.ilike(c, v); return this; }
+  or(f: any) { if (this.realQB) this.realQB.or(f); this.fallbackQB.or(f); return this; }
+  order(c: any, o?: any) { if (this.realQB) this.realQB.order(c, o); this.fallbackQB.order(c, o); return this; }
+  limit(n: any) { if (this.realQB) this.realQB.limit(n); this.fallbackQB.limit(n); return this; }
+  single() { if (this.realQB) this.realQB.single(); this.fallbackQB.single(); return this; }
+  insert(r: any) { if (this.realQB) this.realQB.insert(r); this.fallbackQB.insert(r); return this; }
+  update(v: any) { if (this.realQB) this.realQB.update(v); this.fallbackQB.update(v); return this; }
+  delete() { if (this.realQB) this.realQB.delete(); this.fallbackQB.delete(); return this; }
+
   async execute() {
     if (this.realQB) {
       try { return await this.realQB; } catch { return await this.fallbackQB.execute(); }
