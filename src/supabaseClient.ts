@@ -1,13 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
 
+// Retrieve configuration from environment
 const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL || "";
 const supabaseAnonKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || "";
 
-const isConfigured = typeof supabaseUrl === 'string' && supabaseUrl.startsWith('https://');
-export const isSupabaseConfigured = isConfigured;
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey && !supabaseUrl.startsWith("YOUR_"));
 
-const realSupabase = isConfigured ? createClient(supabaseUrl, supabaseAnonKey) : null;
-
+// Standard default initial state for fallback storage
 const DEFAULT_SETTINGS = {
   id: "config",
   clinic_name: "RK Dental Clinic",
@@ -21,93 +20,363 @@ const DEFAULT_USERS = [
   { id: 1, username: "RK Dental Clinic", password: "admin123", name: "Dr. V. Radhakrishnan BDS., D.Endo." }
 ];
 
+// Helper to initialize local storage
 const getLocalStorageItem = (key: string, defaultValue: any) => {
   const data = localStorage.getItem(key);
   if (!data) {
     localStorage.setItem(key, JSON.stringify(defaultValue));
     return defaultValue;
   }
-  try { return JSON.parse(data); } catch { return defaultValue; }
+  try {
+    return JSON.parse(data);
+  } catch {
+    return defaultValue;
+  }
 };
 
+// Simple offline query-builder to perfectly emulate the Supabase Client API
 class FallbackQueryBuilder {
   private tableName: string;
   private data: any[];
-  private filters: any[] = [];
+  private filters: { col: string; val: any; type?: string }[] = [];
   private orderCol: string | null = null;
   private orderAscending: boolean = true;
   private isSingle: boolean = false;
+  private updateValues: any = null;
+  private isDelete: boolean = false;
   private insertRows: any[] | null = null;
+  private limitCount: number | null = null;
 
   constructor(tableName: string) {
     this.tableName = tableName;
     this.data = getLocalStorageItem(`rk_fallback_${tableName}`, this.tableName === "settings" ? [DEFAULT_SETTINGS] : (this.tableName === "users" ? DEFAULT_USERS : []));
   }
 
-  select(f: any) { return this; }
-  eq(c: string, v: any) { this.filters.push({ col: c, val: v }); return this; }
-  neq(c: string, v: any) { this.filters.push({ col: c, val: v, type: "neq" }); return this; }
-  ilike(c: string, p: string) { this.filters.push({ col: c, val: p, type: "ilike" }); return this; }
-  or(f: string) { this.filters.push({ col: "or", val: f, type: "or" }); return this; }
-  order(c: string, o?: any) { this.orderCol = c; this.orderAscending = o?.ascending ?? true; return this; }
-  limit(n: number) { return this; }
-  single() { this.isSingle = true; return this; }
+  select(fields: string = "*") {
+    return this;
+  }
+
+  eq(column: string, value: any) {
+    this.filters.push({ col: column, val: value });
+    return this;
+  }
+
+  neq(column: string, value: any) {
+    this.filters.push({ col: column, val: value, type: "neq" });
+    return this;
+  }
+
+  ilike(column: string, pattern: string) {
+    this.filters.push({ col: column, val: pattern, type: "ilike" });
+    return this;
+  }
+
+  or(filters: string) {
+    this.filters.push({ col: "or", val: filters, type: "or" });
+    return this;
+  }
+
+  order(column: string, { ascending = true } = {}) {
+    this.orderCol = column;
+    this.orderAscending = ascending;
+    return this;
+  }
+
+  limit(count: number) {
+    this.limitCount = count;
+    return this;
+  }
+
+  single() {
+    this.isSingle = true;
+    return this;
+  }
+
+  private getFilteredData() {
+    let result = [...this.data];
+    for (const filter of this.filters) {
+      if (filter.type === "neq") {
+        result = result.filter(item => item[filter.col] !== filter.val);
+      } else if (filter.type === "ilike") {
+        const cleanPattern = filter.val.replace(/%/g, "").toLowerCase();
+        result = result.filter(item => {
+          const fieldVal = String(item[filter.col] || "").toLowerCase();
+          return fieldVal.includes(cleanPattern);
+        });
+      } else if (filter.type === "or") {
+        const parts = filter.val.split(",");
+        result = result.filter(item => {
+          return parts.some(part => {
+            const match = part.trim().split(".");
+            if (match.length < 3) return false;
+            const col = match[0];
+            const op = match[1];
+            const val = match[2];
+            const itemVal = String(item[col] || "").toLowerCase();
+            const cleanVal = val.replace(/%/g, "").toLowerCase();
+            if (op === "ilike" || op === "eq") {
+              return itemVal.includes(cleanVal);
+            }
+            return false;
+          });
+        });
+      } else {
+        result = result.filter(item => item[filter.col] === filter.val);
+      }
+    }
+    if (this.orderCol) {
+      result.sort((a, b) => {
+        const valA = a[this.orderCol!];
+        const valB = b[this.orderCol!];
+        if (valA < valB) return this.orderAscending ? -1 : 1;
+        if (valA > valB) return this.orderAscending ? 1 : -1;
+        return 0;
+      });
+    }
+
+    // Join bill_items if requested
+    if (this.tableName === "bills") {
+      const allItems = getLocalStorageItem("rk_fallback_bill_items", []);
+      result = result.map(bill => ({
+        ...bill,
+        bill_items: allItems.filter((item: any) => item.bill_id === bill.id)
+      }));
+    }
+
+    if (this.limitCount !== null) {
+      result = result.slice(0, this.limitCount);
+    }
+
+    return result;
+  }
 
   async execute() {
     if (this.insertRows) {
-      const newRows = this.insertRows.map((row, i) => ({ id: row.id || (Date.now() + i), ...row }));
+      const rawRows = this.insertRows;
+      const newRows = rawRows.map((row, index) => {
+        const newId = row.id || (Date.now() + index + Math.floor(Math.random() * 1000));
+        return {
+          id: newId,
+          ...row
+        };
+      });
+
       this.data.push(...newRows);
       localStorage.setItem(`rk_fallback_${this.tableName}`, JSON.stringify(this.data));
-      return { data: this.isSingle ? newRows[0] : newRows, error: null };
+
+      // Handle nested bill_items insertion
+      for (const row of newRows) {
+        if (this.tableName === "bills" && row.items) {
+          const currentItems = getLocalStorageItem("rk_fallback_bill_items", []);
+          const formattedItems = row.items.map((item: any) => ({
+            id: Date.now() + Math.random(),
+            bill_id: row.id,
+            treatment_name: item.treatment_name,
+            amount: item.amount
+          }));
+          currentItems.push(...formattedItems);
+          localStorage.setItem("rk_fallback_bill_items", JSON.stringify(currentItems));
+        }
+      }
+
+      const resData = this.isSingle ? (newRows[0] || null) : newRows;
+      return { data: resData, error: null };
     }
-    const filtered = this.data; 
-    return { data: this.isSingle ? filtered[0] : filtered, error: null };
+
+    if (this.updateValues) {
+      const filtered = this.getFilteredData();
+      const idsToUpdate = new Set(filtered.map(item => item.id));
+
+      this.data = this.data.map(item => {
+        if (idsToUpdate.has(item.id)) {
+          return { ...item, ...this.updateValues };
+        }
+        return item;
+      });
+
+      localStorage.setItem(`rk_fallback_${this.tableName}`, JSON.stringify(this.data));
+
+      const updatedRows = this.data.filter(item => idsToUpdate.has(item.id));
+      const resData = this.isSingle ? (updatedRows[0] || null) : updatedRows;
+      return { data: resData, error: null };
+    }
+
+    if (this.isDelete) {
+      const filtered = this.getFilteredData();
+      const idsToDelete = new Set(filtered.map(item => item.id));
+
+      this.data = this.data.filter(item => !idsToDelete.has(item.id));
+      localStorage.setItem(`rk_fallback_${this.tableName}`, JSON.stringify(this.data));
+
+      // Also delete orphaned bill items
+      if (this.tableName === "bills") {
+        const currentItems = getLocalStorageItem("rk_fallback_bill_items", []);
+        const filteredItems = currentItems.filter((item: any) => !idsToDelete.has(item.bill_id));
+        localStorage.setItem("rk_fallback_bill_items", JSON.stringify(filteredItems));
+      }
+
+      const resData = this.isSingle ? (filtered[0] || null) : filtered;
+      return { data: resData, error: null };
+    }
+
+    const filtered = this.getFilteredData();
+    const resData = this.isSingle ? (filtered[0] || null) : filtered;
+    return { data: resData, error: null };
   }
-  then(onf?: any, onr?: any) { return this.execute().then(onf, onr); }
-  insert(r: any) { this.insertRows = Array.isArray(r) ? r : [r]; return this; }
-  update(v: any) { return this; }
-  delete() { return this; }
+
+  // Promise alignment so that directly awaiting the chain works
+  then(onfulfilled?: (value: any) => any, onrejected?: (reason: any) => any) {
+    return this.execute().then(onfulfilled, onrejected);
+  }
+
+  insert(rows: any) {
+    this.insertRows = Array.isArray(rows) ? rows : [rows];
+    return this;
+  }
+
+  update(values: any) {
+    this.updateValues = values;
+    return this;
+  }
+
+  delete() {
+    this.isDelete = true;
+    return this;
+  }
 }
 
+// Robust Query Builder wraps queries to Supabase and falls back if tables are missing or connection fails
 class RobustQueryBuilder {
-  private fallbackQB: any;
+  private tableName: string;
+  private fallbackQB: FallbackQueryBuilder;
   private realQB: any;
 
   constructor(tableName: string, realClient: any) {
+    this.tableName = tableName;
     this.fallbackQB = new FallbackQueryBuilder(tableName);
-    // @ts-ignore
     this.realQB = realClient ? realClient.from(tableName) : null;
   }
 
-  select(f: any) { if (this.realQB) this.realQB.select(f); this.fallbackQB.select(f); return this; }
-  eq(c: any, v: any) { if (this.realQB) this.realQB.eq(c, v); this.fallbackQB.eq(c, v); return this; }
-  neq(c: any, v: any) { if (this.realQB) this.realQB.neq(c, v); this.fallbackQB.neq(c, v); return this; }
-  ilike(c: any, v: any) { if (this.realQB) this.realQB.ilike(c, v); this.fallbackQB.ilike(c, v); return this; }
-  or(f: any) { if (this.realQB) this.realQB.or(f); this.fallbackQB.or(f); return this; }
-  order(c: any, o?: any) { if (this.realQB) this.realQB.order(c, o); this.fallbackQB.order(c, o); return this; }
-  limit(n: any) { if (this.realQB) this.realQB.limit(n); this.fallbackQB.limit(n); return this; }
-  single() { if (this.realQB) this.realQB.single(); this.fallbackQB.single(); return this; }
-  insert(r: any) { if (this.realQB) this.realQB.insert(r); this.fallbackQB.insert(r); return this; }
-  update(v: any) { if (this.realQB) this.realQB.update(v); this.fallbackQB.update(v); return this; }
-  delete() { if (this.realQB) this.realQB.delete(); this.fallbackQB.delete(); return this; }
+  select(fields: string = "*") {
+    if (this.realQB) this.realQB = this.realQB.select(fields);
+    this.fallbackQB.select(fields);
+    return this;
+  }
+
+  eq(column: string, value: any) {
+    if (this.realQB) this.realQB = this.realQB.eq(column, value);
+    this.fallbackQB.eq(column, value);
+    return this;
+  }
+
+  neq(column: string, value: any) {
+    if (this.realQB) this.realQB = this.realQB.neq(column, value);
+    this.fallbackQB.neq(column, value);
+    return this;
+  }
+
+  ilike(column: string, pattern: string) {
+    if (this.realQB) this.realQB = this.realQB.ilike(column, pattern);
+    this.fallbackQB.ilike(column, pattern);
+    return this;
+  }
+
+  or(filters: string) {
+    if (this.realQB) this.realQB = this.realQB.or(filters);
+    this.fallbackQB.or(filters);
+    return this;
+  }
+
+  order(column: string, options?: { ascending?: boolean }) {
+    if (this.realQB) this.realQB = this.realQB.order(column, options);
+    this.fallbackQB.order(column, options);
+    return this;
+  }
+
+  limit(count: number) {
+    if (this.realQB) this.realQB = this.realQB.limit(count);
+    this.fallbackQB.limit(count);
+    return this;
+  }
+
+  single() {
+    if (this.realQB) this.realQB = this.realQB.single();
+    this.fallbackQB.single();
+    return this;
+  }
+
+  insert(rows: any) {
+    if (this.realQB) this.realQB = this.realQB.insert(rows);
+    this.fallbackQB.insert(rows);
+    return this;
+  }
+
+  update(values: any) {
+    if (this.realQB) this.realQB = this.realQB.update(values);
+    this.fallbackQB.update(values);
+    return this;
+  }
+
+  delete() {
+    if (this.realQB) this.realQB = this.realQB.delete();
+    this.fallbackQB.delete();
+    return this;
+  }
 
   async execute() {
     if (this.realQB) {
-      try { return await this.realQB; } catch { return await this.fallbackQB.execute(); }
+      try {
+        const result = await this.realQB;
+        if (result && result.error) {
+          const errMsg = String(result.error.message || result.error || "");
+          console.warn(`[Supabase Proxy] Query error on '${this.tableName}'. Falling back to offline client. Error:`, errMsg);
+          return await this.fallbackQB.execute();
+        }
+        return result;
+      } catch (err: any) {
+        console.warn(`[Supabase Proxy] Connection/Execution crash on '${this.tableName}'. Falling back to offline client. Error:`, err);
+        return await this.fallbackQB.execute();
+      }
     }
     return await this.fallbackQB.execute();
   }
-  then(onf?: any, onr?: any) { return this.execute().then(onf, onr); }
+
+  then(onfulfilled?: (value: any) => any, onrejected?: (reason: any) => any) {
+    return this.execute().then(onfulfilled, onrejected);
+  }
 }
 
+const realSupabase = isSupabaseConfigured ? createClient(supabaseUrl, supabaseAnonKey) : null;
+
+// Fallback / Wrapped Supabase Client exports
 export const supabase = {
-  from(tableName: string) { return new RobustQueryBuilder(tableName, realSupabase); },
+  from(tableName: string) {
+    return new RobustQueryBuilder(tableName, realSupabase);
+  },
   auth: {
-    async signInWithPassword({ email, username, password }: any) {
+    async signInWithPassword({ email, password, username }: any) {
+      const loginUser = email || username || "";
+      // Fallback local authentication
       const users = getLocalStorageItem("rk_fallback_users", DEFAULT_USERS);
-      const match = users.find((u: any) => (u.username === email || u.username === username) && u.password === password);
-      return match ? { data: { user: { email: match.username }, session: {} }, error: null } : { data: { user: null }, error: { message: "Invalid" } };
+      const match = users.find((u: any) => u.username.trim().toLowerCase() === loginUser.trim().toLowerCase() && u.password === password);
+      if (match) {
+        return {
+          data: {
+            user: { id: match.id, email: match.username, user_metadata: { name: match.name } },
+            session: { access_token: "mock-token-ipad-pwa" }
+          },
+          error: null
+        };
+      }
+      return { data: { user: null, session: null }, error: { message: "Invalid credentials" } };
     },
-    async signOut() { return { error: null }; }
+    async signOut() {
+      if (realSupabase) {
+        try {
+          await realSupabase.auth.signOut();
+        } catch (err) {}
+      }
+      return { error: null };
+    }
   }
 };

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Plus, Trash2, Receipt, Save, RefreshCw, UserCheck, ShieldCheck, CreditCard, Banknote, HelpCircle } from "lucide-react";
 import { Bill, BillItem, ClinicSettings } from "../types";
 import ReceiptPrint from "../ReceiptPrint";
@@ -6,6 +6,8 @@ import { supabase } from "../supabaseClient";
 
 interface BillingDeskProps {
   settings: ClinicSettings;
+  activePatient?: { name: string; phone: string };
+  onActivePatientChange?: (p: { name: string; phone: string }) => void;
 }
 
 // Common dentist treatment templates for rapid input
@@ -22,9 +24,17 @@ const TREATMENT_TEMPLATES = [
   { name: "Orthodontic Consultation", amount: 500 },
 ];
 
-export default function BillingDesk({ settings }: BillingDeskProps) {
+export default function BillingDesk({ settings, activePatient, onActivePatientChange }: BillingDeskProps) {
   const [patientName, setPatientName] = useState("");
   const [patientMobile, setPatientMobile] = useState("");
+
+  // Sync with global activePatient prop if provided
+  useEffect(() => {
+    if (activePatient) {
+      setPatientName(activePatient.name || "");
+      setPatientMobile(activePatient.phone || "");
+    }
+  }, [activePatient]);
   const [paymentMethod, setPaymentMethod] = useState("Cash");
   
   // Dynamic Quick-Add Services list
@@ -125,6 +135,9 @@ export default function BillingDesk({ settings }: BillingDeskProps) {
   const handleReset = () => {
     setPatientName("");
     setPatientMobile("");
+    if (onActivePatientChange) {
+      onActivePatientChange({ name: "", phone: "" });
+    }
     setPaymentMethod("Cash");
     setItems([{ treatment_name: "", amount: 0 }]);
     setError(null);
@@ -303,9 +316,15 @@ export default function BillingDesk({ settings }: BillingDeskProps) {
                   type="text"
                   required
                   value={patientName}
-                  onChange={(e) => setPatientName(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setPatientName(val);
+                    if (onActivePatientChange) {
+                      onActivePatientChange({ name: val, phone: patientMobile });
+                    }
+                  }}
                   placeholder="e.g. John Doe"
-                  className="w-full bg-white border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-800/10 focus:border-blue-800 rounded-md transition-all"
+                  className="w-full bg-white border border-gray-300 px-3 py-2 text-sm text-gray-950 focus:outline-none focus:ring-2 focus:ring-blue-800/10 focus:border-blue-800 rounded-md transition-all"
                 />
               </div>
 
@@ -316,9 +335,15 @@ export default function BillingDesk({ settings }: BillingDeskProps) {
                 <input
                   type="text"
                   value={patientMobile}
-                  onChange={(e) => setPatientMobile(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setPatientMobile(val);
+                    if (onActivePatientChange) {
+                      onActivePatientChange({ name: patientName, phone: val });
+                    }
+                  }}
                   placeholder="e.g. +91 9876543210"
-                  className="w-full bg-white border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-800/10 focus:border-blue-800 rounded-md transition-all"
+                  className="w-full bg-white border border-gray-300 px-3 py-2 text-sm text-gray-950 focus:outline-none focus:ring-2 focus:ring-blue-800/10 focus:border-blue-800 rounded-md transition-all"
                 />
               </div>
             </div>
@@ -382,7 +407,7 @@ export default function BillingDesk({ settings }: BillingDeskProps) {
                   <button
                     type="button"
                     onClick={(e) => handleDeleteService(i, e)}
-                    className="p-2 mr-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors cursor-pointer shrink-0 opacity-0 group-hover:opacity-100 focus:opacity-100"
+                    className="p-2 mr-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors cursor-pointer shrink-0 opacity-100"
                     title="Delete service preset"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -415,7 +440,7 @@ export default function BillingDesk({ settings }: BillingDeskProps) {
                     <th className="pb-3 w-8 text-center">#</th>
                     <th className="pb-3 pl-3">Treatment / Procedure Description</th>
                     <th className="pb-3 pr-3 w-40 text-right">Amount (₹)</th>
-                    <th className="pb-3 w-12 text-center">Remove</th>
+                    <th className="pb-3 w-28 text-center">Remove</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -448,9 +473,10 @@ export default function BillingDesk({ settings }: BillingDeskProps) {
                         <button
                           type="button"
                           onClick={() => handleRemoveItem(index)}
-                          className="text-gray-400 hover:text-red-500 p-1.5 rounded-full hover:bg-gray-100 transition-colors cursor-pointer"
+                          className="inline-flex items-center space-x-1 px-2.5 py-1 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 hover:border-red-300 rounded transition-colors cursor-pointer shadow-sm"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Remove</span>
                         </button>
                       </td>
                     </tr>

@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { 
   Receipt, History, FileText, Database, Settings as SettingsIcon, 
-  LogOut, Shield, Clock, Landmark, LayoutDashboard, Activity, HeartPulse
+  LogOut, Shield, Clock, Landmark, LayoutDashboard, Activity, HeartPulse,
+  UserCheck, UserX
 } from "lucide-react";
 import { User, ClinicSettings } from "./types";
 import Login from "./components/Login";
 import Dashboard from "./components/Dashboard";
+import TreatmentDesk from "./components/TreatmentDesk";
 import BillingDesk from "./components/BillingDesk";
 import BillHistory from "./components/BillHistory";
 import PrescriptionModule from "./components/PrescriptionModule";
@@ -14,12 +16,13 @@ import DataManager from "./DataManager";
 import { supabase } from "./supabaseClient";
 import "./ReceiptPrint.css";
 
-type ActiveTabType = "dashboard" | "billing" | "history" | "prescriptions" | "prescription_history" | "backup" | "settings";
+type ActiveTabType = "dashboard" | "treatment_desk" | "billing" | "history" | "prescriptions" | "prescription_history" | "backup" | "settings";
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [settings, setSettings] = useState<ClinicSettings | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTabType>("dashboard");
+  const [activePatient, setActivePatient] = useState<{ name: string; phone: string }>({ name: "", phone: "" });
   
   // Real-time ticking clock
   const [currentTime, setCurrentTime] = useState<string>("");
@@ -242,10 +245,77 @@ export default function App() {
       </header>
 
       {/* 2. MAIN APPLICATION CONTENT CHASSIS */}
-      <div className="flex-1 flex flex-col md:flex-row max-w-7xl w-full mx-auto p-5 gap-6">
+      <div className="flex-1 flex flex-col max-w-7xl w-full mx-auto p-5 gap-6">
         
-        {/* Sidebar Navigation */}
-        <nav className="w-full md:w-60 flex flex-col gap-1.5 shrink-0 bg-white p-4 rounded-lg border border-gray-200 shadow-sm h-fit">
+        {/* Global Patient Tracker */}
+        <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-4 flex flex-col sm:flex-row items-center justify-between gap-4 transition-all shrink-0">
+          <div className="flex items-center space-x-3.5 w-full sm:w-auto">
+            <div className={`p-2.5 rounded-lg shrink-0 flex items-center justify-center transition-colors ${
+              activePatient.name ? "bg-emerald-50 text-emerald-800 border border-emerald-200" : "bg-blue-50 text-blue-800 border border-blue-100"
+            }`}>
+              <UserCheck className="w-5 h-5" />
+            </div>
+            <div className="min-w-0 flex-1 sm:flex-initial">
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">Active Patient Session</span>
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded tracking-wide uppercase ${
+                  activePatient.name 
+                    ? "bg-emerald-100 text-emerald-800" 
+                    : "bg-amber-100 text-amber-800 animate-pulse"
+                }`}>
+                  {activePatient.name ? "Active" : "Ready / Enter Below"}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {activePatient.name 
+                  ? `Patient: ${activePatient.name} ${activePatient.phone ? `(${activePatient.phone})` : ""}`
+                  : "Enter details once to sync across Billing Desk & Prescription modules."}
+              </p>
+            </div>
+          </div>
+
+          {/* Inline Inputs for One-Time Entry */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto sm:flex-1 sm:max-w-xl justify-end">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                placeholder="Patient Full Name..."
+                value={activePatient.name}
+                onChange={(e) => setActivePatient({ ...activePatient, name: e.target.value })}
+                className="w-full bg-white border border-gray-300 px-3 py-1.5 pl-8 text-xs text-gray-950 focus:outline-none focus:ring-2 focus:ring-blue-800/10 focus:border-blue-800 rounded-md transition-all placeholder-gray-400 font-medium"
+              />
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 font-medium text-[11px]">👤</span>
+            </div>
+            
+            <div className="relative flex-1">
+              <input
+                type="text"
+                placeholder="Mobile Number..."
+                value={activePatient.phone}
+                onChange={(e) => setActivePatient({ ...activePatient, phone: e.target.value })}
+                className="w-full bg-white border border-gray-300 px-3 py-1.5 pl-8 text-xs text-gray-950 focus:outline-none focus:ring-2 focus:ring-blue-800/10 focus:border-blue-800 rounded-md transition-all placeholder-gray-400 font-medium"
+              />
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 font-medium text-[11px]">📞</span>
+            </div>
+
+            {activePatient.name && (
+              <button
+                type="button"
+                onClick={() => setActivePatient({ name: "", phone: "" })}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold px-3 py-1.5 rounded-md transition-colors flex items-center justify-center gap-1 cursor-pointer shrink-0 border border-gray-200"
+                title="Clear active patient session"
+              >
+                <UserX className="w-3.5 h-3.5 text-gray-500" />
+                <span className="sm:hidden md:inline">Clear</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="flex-1 flex flex-col md:flex-row gap-6">
+          
+          {/* Sidebar Navigation */}
+          <nav className="w-full md:w-60 flex flex-col gap-1.5 shrink-0 bg-white p-4 rounded-lg border border-gray-200 shadow-sm h-fit">
           <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider px-2.5 mb-1.5 block">
             Clinical System
           </span>
@@ -260,6 +330,21 @@ export default function App() {
           >
             <LayoutDashboard className={`w-4 h-4 shrink-0 ${activeTab === "dashboard" ? "text-white" : "text-gray-400"}`} />
             <span>Dashboard</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("treatment_desk")}
+            className={`w-full text-left font-bold px-3.5 py-2.5 text-xs tracking-wide flex items-center space-x-2.5 transition-all rounded-md cursor-pointer ${
+              activeTab === "treatment_desk"
+                ? "bg-blue-800 text-white shadow-md font-bold"
+                : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+            }`}
+          >
+            <Activity className={`w-4 h-4 shrink-0 ${activeTab === "treatment_desk" ? "text-white" : "text-gray-400"}`} />
+            <span className="flex items-center gap-1.5">
+              <span>Treatment Desk</span>
+              <span className="bg-emerald-500 w-1.5 h-1.5 rounded-full inline-block animate-pulse"></span>
+            </span>
           </button>
 
           <button
@@ -367,10 +452,37 @@ export default function App() {
               onNavigate={(tab) => setActiveTab(tab)} 
             />
           )}
-          {activeTab === "billing" && <BillingDesk settings={settings} />}
+          {activeTab === "treatment_desk" && (
+            <TreatmentDesk 
+              settings={settings} 
+              activePatient={activePatient}
+              onActivePatientChange={setActivePatient}
+            />
+          )}
+          {activeTab === "billing" && (
+            <BillingDesk 
+              settings={settings} 
+              activePatient={activePatient}
+              onActivePatientChange={setActivePatient}
+            />
+          )}
           {activeTab === "history" && <BillHistory settings={settings} />}
-          {activeTab === "prescriptions" && <PrescriptionModule settings={settings} initialTab="create" />}
-          {activeTab === "prescription_history" && <PrescriptionModule settings={settings} initialTab="history" />}
+          {activeTab === "prescriptions" && (
+            <PrescriptionModule 
+              settings={settings} 
+              initialTab="create" 
+              activePatient={activePatient}
+              onActivePatientChange={setActivePatient}
+            />
+          )}
+          {activeTab === "prescription_history" && (
+            <PrescriptionModule 
+              settings={settings} 
+              initialTab="history" 
+              activePatient={activePatient}
+              onActivePatientChange={setActivePatient}
+            />
+          )}
           {activeTab === "backup" && <DataManager onRestoreSuccess={handleRestoreComplete} />}
           {activeTab === "settings" && (
             <SettingsPage
@@ -385,6 +497,7 @@ export default function App() {
           )}
         </main>
 
+        </div>
       </div>
 
       {/* 3. WINDOW STATUS FOOTER */}

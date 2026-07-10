@@ -59,203 +59,150 @@ export default function ReceiptPrint({ bill, settings, onClose }: ReceiptPrintPr
 
   const handleDownloadPDF = () => {
     try {
-      const pageWidth = 80;
-      const printableWidth = 72;
-      const leftMargin = 4;
-      const rightMargin = 76;
-      
-      const tempDoc = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: [80, 1000]
-      });
-      
-      tempDoc.setFont("courier", "normal");
-      let y = 10;
-      
-      // Clinic Header
-      tempDoc.setFontSize(12);
-      y += 6;
-      
-      // Address
-      tempDoc.setFontSize(8);
-      const addrLines = tempDoc.splitTextToSize(settings.address, printableWidth);
-      y += addrLines.length * 4;
-      
-      // Phone
-      y += 4;
-      // Divider
-      y += 4;
-      // Metadata
-      y += 12;
-      // Patient
-      const patientNameLines = tempDoc.splitTextToSize(bill.patient_name, printableWidth);
-      y += patientNameLines.length * 4 + 4;
-      // Patient Mobile
-      const mob = bill.patient_mobile || "N/A";
-      const patientMobileLines = tempDoc.splitTextToSize(mob, printableWidth);
-      y += patientMobileLines.length * 4 + 4;
-      // Divider
-      y += 4;
-      // Treatment Header
-      y += 5;
-      // Divider
-      y += 4;
-      
-      // Items
-      const items = bill.items || bill.bill_items || [];
-      items.forEach((item: any) => {
-        const lines = tempDoc.splitTextToSize(item.treatment_name || "Dental treatment", 48);
-        y += lines.length * 4.5;
-      });
-      
-      // Divider
-      y += 4;
-      // Grand Total
-      y += 6;
-      // Payment Method
-      y += 4;
-      // Divider
-      y += 4;
-      
-      // Footer
-      const footerLines = tempDoc.splitTextToSize(settings.receipt_footer, printableWidth);
-      y += footerLines.length * 4;
-      // Divider end
-      y += 4;
-      
-      const finalHeight = y + 12;
-      
       const doc = new jsPDF({
         orientation: "portrait",
         unit: "mm",
-        format: [pageWidth, finalHeight]
+        format: "a4"
       });
-      
-      doc.setFont("courier", "normal");
-      doc.setFontSize(8);
-      doc.setTextColor(0, 0, 0);
-      
-      let currentY = 10;
-      
-      // Clinic Name
-      doc.setFont("courier", "bold");
-      doc.setFontSize(12);
-      doc.text(settings.clinic_name.toUpperCase(), 40, currentY, { align: "center" });
-      currentY += 6;
-      
-      // Address
-      doc.setFont("courier", "normal");
-      doc.setFontSize(8);
-      addrLines.forEach((line: string) => {
-        doc.text(line, 40, currentY, { align: "center" });
-        currentY += 4;
-      });
-      
-      // Phone
-      doc.text(`Mobile: ${settings.phone}`, 40, currentY, { align: "center" });
-      currentY += 4;
-      
-      // Divider
-      doc.text("-".repeat(36), 40, currentY, { align: "center" });
-      currentY += 4;
-      
-      // Bill Metadata
-      doc.text(`Bill No: ${bill.bill_number}`, leftMargin, currentY);
-      currentY += 4;
-      doc.text(`Date: ${bill.date}`, leftMargin, currentY);
-      currentY += 4;
-      doc.text(`Time: ${bill.time}`, leftMargin, currentY);
-      currentY += 4;
-      
-      // Patient
-      doc.setFont("courier", "bold");
-      doc.text("Patient:", leftMargin, currentY);
-      currentY += 4;
-      doc.setFont("courier", "normal");
-      patientNameLines.forEach((line: string) => {
-        doc.text(line, leftMargin, currentY);
-        currentY += 4;
-      });
-      
-      // Mobile
-      currentY += 1;
-      doc.setFont("courier", "bold");
-      doc.text("Mobile:", leftMargin, currentY);
-      currentY += 4;
-      doc.setFont("courier", "normal");
-      patientMobileLines.forEach((line: string) => {
-        doc.text(line, leftMargin, currentY);
-        currentY += 4;
-      });
-      
-      // Divider
-      doc.text("-".repeat(36), 40, currentY, { align: "center" });
-      currentY += 4;
-      
-      // Table Headers
-      doc.setFont("courier", "bold");
-      doc.text("Treatment", leftMargin, currentY);
-      doc.text("Amt", rightMargin, currentY, { align: "right" });
-      currentY += 4;
-      
-      // Divider
-      doc.setFont("courier", "normal");
-      doc.text("-".repeat(36), 40, currentY, { align: "center" });
-      currentY += 4;
-      
-      // Items
-      items.forEach((item: any) => {
-        const desc = item.treatment_name || "Dental Procedure";
-        const lines = doc.splitTextToSize(desc, 48);
-        lines.forEach((line: string, index: number) => {
-          doc.text(line, leftMargin, currentY);
-          if (index === lines.length - 1) {
-            doc.text(Number(item.amount || 0).toFixed(2), rightMargin, currentY, { align: "right" });
-          }
-          currentY += 4.5;
-        });
-      });
-      
-      // Divider
-      doc.text("-".repeat(36), 40, currentY, { align: "center" });
-      currentY += 4;
-      
-      // Grand Total
-      doc.setFont("courier", "bold");
+
+      // Outer border for official medical form styling
+      doc.setDrawColor(30, 64, 175); // Deep Blue
+      doc.setLineWidth(1.0);
+      doc.rect(8, 8, 194, 281, "S");
+
+      // Letterhead clinic header (Left side)
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(20);
+      doc.setTextColor(30, 64, 175); // Deep Blue (#1E40AF)
+      doc.text(settings.clinic_name.toUpperCase(), 18, 24);
+
+      doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
-      doc.text("Grand Total:", leftMargin, currentY);
-      doc.text(Number(bill.grand_total).toFixed(2), rightMargin, currentY, { align: "right" });
-      currentY += 6;
+      doc.setTextColor(107, 114, 128); // Slate gray
+
+      // Split address into multiple lines
+      const addressLines = doc.splitTextToSize(settings.address, 110);
+      doc.text(addressLines, 18, 30);
       
-      // Payment Method
-      doc.setFont("courier", "normal");
-      doc.setFontSize(8);
-      doc.text("Payment: ", leftMargin, currentY);
-      doc.setFont("courier", "bold");
-      doc.text(bill.payment_method, leftMargin + 18, currentY);
-      currentY += 4;
+      const addressHeight = addressLines.length * 4;
+      doc.text(`Contact Phone: ${settings.phone}`, 18, 32 + addressHeight);
+
+      // Invoice metadata (Right side)
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(55, 65, 81);
+      doc.text("INVOICE / RECEIPT", 145, 24);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(75, 85, 99);
+      doc.text(`Invoice No: ${bill.bill_number}`, 145, 30);
+      doc.text(`Date      : ${bill.date}`, 145, 35);
+      doc.text(`Time      : ${bill.time}`, 145, 40);
+
+      // Divider line
+      doc.setDrawColor(229, 231, 235);
+      doc.setLineWidth(0.5);
+      doc.line(18, 46 + addressHeight, 192, 46 + addressHeight);
+
+      // Patient Details Block
+      const patientY = 52 + addressHeight;
+      doc.setFillColor(243, 244, 246);
+      doc.rect(18, patientY, 174, 18, "F");
+      doc.setDrawColor(229, 231, 235);
+      doc.rect(18, patientY, 174, 18, "S");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(55, 65, 81);
+      doc.text("Patient Name :", 24, patientY + 7);
+      doc.text("Patient Phone:", 24, patientY + 13);
+
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(17, 24, 39);
+      doc.text(bill.patient_name, 54, patientY + 7);
+      doc.setFont("helvetica", "normal");
+      doc.text(bill.patient_mobile || "N/A", 54, patientY + 13);
+
+      let startY = patientY + 28;
+
+      // Table Header for treatments
+      doc.setFillColor(30, 64, 175);
+      doc.rect(18, startY, 174, 8, "F");
+      doc.setFontSize(9.5);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(255, 255, 255);
+      doc.text("#", 22, startY + 5.5);
+      doc.text("Dental Treatment / Clinical Procedure Description", 30, startY + 5.5);
+      doc.text("Amount (INR)", 186, startY + 5.5, { align: "right" });
       
-      // Divider
-      doc.setFont("courier", "normal");
-      doc.text("-".repeat(36), 40, currentY, { align: "center" });
-      currentY += 4;
+      startY += 8;
+
+      // Draw Items
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(31, 41, 55);
       
-      // Footer Thank You
-      footerLines.forEach((line: string) => {
-        doc.text(line, 40, currentY, { align: "center" });
-        currentY += 4;
+      const billItems = bill.items || bill.bill_items || [];
+      billItems.forEach((item: any, i: number) => {
+        // Alternate raw table background shading
+        if (i % 2 === 1) {
+          doc.setFillColor(249, 250, 251);
+          doc.rect(18, startY, 174, 8, "F");
+        }
+        // Draw bottom border for item row
+        doc.setDrawColor(243, 244, 246);
+        doc.line(18, startY + 8, 192, startY + 8);
+
+        doc.text(String(i + 1), 22, startY + 5.5);
+        doc.text(item.treatment_name || "Dental Treatment", 30, startY + 5.5);
+        doc.text(Number(item.amount || 0).toFixed(2), 186, startY + 5.5, { align: "right" });
+        
+        startY += 8;
       });
+
+      // Grand Total calculations block
+      startY += 4;
+      doc.setDrawColor(209, 213, 219);
+      doc.line(18, startY, 192, startY);
       
-      // Divider at the end
-      doc.text("-".repeat(36), 40, currentY, { align: "center" });
-      currentY += 4;
+      startY += 5;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(75, 85, 99);
+      doc.text(`Payment Method: ${bill.payment_method}`, 18, startY + 5);
       
-      doc.save(`Receipt_${bill.bill_number}.pdf`);
-      setStatusMessage("PDF Receipt downloaded successfully to your iPad!");
+      doc.setFontSize(12);
+      doc.setTextColor(30, 64, 175); // Deep Blue
+      doc.text(`Grand Total: INR ${Number(bill.grand_total).toFixed(2)}`, 192, startY + 5, { align: "right" });
+
+      // Signature & Doctor Stamp at bottom
+      const pageHeight = doc.internal.pageSize.height;
+      doc.setDrawColor(229, 231, 235);
+      doc.line(18, pageHeight - 38, 192, pageHeight - 38);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(55, 65, 81);
+      doc.text("Dr. V. Radhakrishnan BDS., D.Endo.", 192, pageHeight - 28, { align: "right" });
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8.5);
+      doc.setTextColor(107, 114, 128);
+      doc.text("Registered Dental Surgeon", 192, pageHeight - 23, { align: "right" });
+      doc.text("Authorized Signature & Seal", 192, pageHeight - 18, { align: "right" });
+
+      // Receipt custom Footer
+      if (settings.receipt_footer) {
+        doc.text(settings.receipt_footer, 18, pageHeight - 23);
+      } else {
+        doc.text("Thank you for choosing us for your dental healthcare!", 18, pageHeight - 23);
+      }
+
+      doc.save(`Invoice_${bill.bill_number}.pdf`);
+      setStatusMessage("A4 Invoice PDF downloaded successfully to your iPad!");
       setStatusType("success");
     } catch (err: any) {
-      setStatusMessage("Failed to generate offline PDF file.");
+      console.error(err);
+      setStatusMessage("Failed to generate offline A4 PDF file.");
       setStatusType("error");
     }
   };

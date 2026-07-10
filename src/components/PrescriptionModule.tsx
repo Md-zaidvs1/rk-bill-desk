@@ -8,6 +8,8 @@ import { bluetoothPrinter } from "../BluetoothPrinter";
 interface PrescriptionModuleProps {
   settings: ClinicSettings;
   initialTab?: "create" | "history";
+  activePatient?: { name: string; phone: string };
+  onActivePatientChange?: (p: { name: string; phone: string }) => void;
 }
 
 const COMMON_DENTAL_MEDICINES = [
@@ -20,7 +22,7 @@ const COMMON_DENTAL_MEDICINES = [
   { name: "Choline Salicylate Gel", dosage: "Apply topically", frequency: "3 to 4 times daily", duration: "5 Days", instructions: "Apply on affected ulcer/gums" }
 ];
 
-export default function PrescriptionModule({ settings, initialTab = "create" }: PrescriptionModuleProps) {
+export default function PrescriptionModule({ settings, initialTab = "create", activePatient, onActivePatientChange }: PrescriptionModuleProps) {
   // Mode: "create" or "history"
   const [activeTab, setActiveTab] = useState<"create" | "history">(initialTab);
   
@@ -31,6 +33,14 @@ export default function PrescriptionModule({ settings, initialTab = "create" }: 
   // Prescription Form State
   const [patientName, setPatientName] = useState("");
   const [patientMobile, setPatientMobile] = useState("");
+
+  // Sync with global activePatient prop if provided
+  useEffect(() => {
+    if (activePatient) {
+      setPatientName(activePatient.name || "");
+      setPatientMobile(activePatient.phone || "");
+    }
+  }, [activePatient]);
   const [doctorNotes, setDoctorNotes] = useState("");
   const [medicines, setMedicines] = useState<Medicine[]>([
     { name: "", dosage: "", frequency: "", duration: "", instructions: "" }
@@ -195,6 +205,9 @@ export default function PrescriptionModule({ settings, initialTab = "create" }: 
   const handleResetForm = () => {
     setPatientName("");
     setPatientMobile("");
+    if (onActivePatientChange) {
+      onActivePatientChange({ name: "", phone: "" });
+    }
     setDoctorNotes("");
     setMedicines([{ name: "", dosage: "", frequency: "", duration: "", instructions: "" }]);
     setError(null);
@@ -255,10 +268,18 @@ export default function PrescriptionModule({ settings, initialTab = "create" }: 
 
   // WhatsApp Share Construction
   const handleWhatsAppShare = (pres: Prescription) => {
-    if (!pres.patient_mobile) {
-      alert("No patient mobile number provided to share via WhatsApp.");
+    const rawMobile = pres?.patient_mobile || "";
+    let cleanMobile = rawMobile.replace(/\D/g, "");
+    if (cleanMobile.startsWith("0")) {
+      cleanMobile = cleanMobile.substring(1);
+    }
+
+    if (!cleanMobile) {
+      alert("Friendly reminder: Please make sure a valid mobile number is registered for the patient to share via WhatsApp.");
       return;
     }
+
+    const formattedMobile = cleanMobile.startsWith("91") ? cleanMobile : `91${cleanMobile}`;
 
     // Format medicines into structured text block
     const medText = pres.medicines.map((m, idx) => 
@@ -271,8 +292,7 @@ export default function PrescriptionModule({ settings, initialTab = "create" }: 
       .replace("{medicines_text}", medText)
       .replace("{notes}", pres.doctor_notes || "None");
 
-    const cleanMobile = pres.patient_mobile.replace(/[^\d+]/g, "");
-    const url = `https://api.whatsapp.com/send?phone=${encodeURIComponent(cleanMobile)}&text=${encodeURIComponent(text)}`;
+    const url = `https://wa.me/${formattedMobile}?text=${encodeURIComponent(text)}`;
     window.open(url, "_blank");
   };
 
@@ -403,14 +423,21 @@ export default function PrescriptionModule({ settings, initialTab = "create" }: 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
     doc.setTextColor(55, 65, 81);
-    doc.text("Dr. V. Radhakrishnan BDS., D.Endo.", 150, pageHeight - 25);
+    doc.text("Dr. V. Radhakrishnan BDS., D.Endo.", 195, pageHeight - 25, { align: "right" });
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
     doc.setTextColor(107, 114, 128);
-    doc.text("Registered Dental Surgeon", 150, pageHeight - 21);
-    doc.text("Clinic Seal / Signature", 150, pageHeight - 17);
+    doc.text("Registered Dental Surgeon", 195, pageHeight - 21, { align: "right" });
+    doc.text("Authorized Signature & Seal", 195, pageHeight - 17, { align: "right" });
 
     // Footer info
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(30, 64, 175);
+    doc.text("Thank you for trusting us with your dental health!", 15, pageHeight - 25);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(107, 114, 128);
     doc.text("Complete the course of prescribed medication. Keep out of reach of children.", 15, pageHeight - 21);
     doc.text("Contact the clinic in case of any allergy or adverse reactions.", 15, pageHeight - 17);
 
@@ -446,9 +473,9 @@ export default function PrescriptionModule({ settings, initialTab = "create" }: 
             .patient-row strong { display: inline-block; width: 110px; color: #4b5563; font-size: 12px; }
             .section-title { font-size: 14px; font-weight: bold; border-bottom: 1.5px solid #1e40af; padding-bottom: 4px; margin-bottom: 10px; color: #1e40af; text-transform: uppercase; letter-spacing: 0.5px; }
             .notes { margin-bottom: 25px; white-space: pre-line; color: #374151; font-size: 13px; line-height: 1.5; background: #fafafa; padding: 10px; border-left: 3px solid #1e40af; }
-            .med-table { width: 100%; border-collapse: collapse; margin-bottom: 50px; }
-            .med-table th { background: #1e40af; color: #ffffff; text-align: left; padding: 10px; font-weight: bold; font-size: 12px; border: 1px solid #1e40af; }
-            .med-table td { padding: 10px; border-bottom: 1px solid #e5e7eb; font-size: 12px; }
+            .med-table { width: 100%; border-collapse: collapse; margin-bottom: 50px; table-layout: fixed; }
+            .med-table th { background: #1e40af; color: #ffffff; text-align: left; padding: 10px; font-weight: bold; font-size: 12px; border: 1px solid #1e40af; word-wrap: break-word; overflow-wrap: break-word; }
+            .med-table td { padding: 10px; border-bottom: 1px solid #e5e7eb; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word; }
             .med-table tr:nth-child(even) { background-color: #f9fafb; }
             .signature-block { margin-top: 100px; text-align: right; border-top: 1px solid #e5e7eb; padding-top: 15px; }
             .signature-block strong { font-size: 14px; color: #1e40af; }
@@ -489,11 +516,11 @@ export default function PrescriptionModule({ settings, initialTab = "create" }: 
           <table class="med-table">
             <thead>
               <tr>
-                <th>Medicine Name</th>
-                <th>Dosage</th>
-                <th>Frequency</th>
-                <th>Duration</th>
-                <th>Instructions</th>
+                <th style="width: 25%;">Medicine Name</th>
+                <th style="width: 15%;">Dosage</th>
+                <th style="width: 15%;">Frequency</th>
+                <th style="width: 15%;">Duration</th>
+                <th style="width: 30%;">Instructions</th>
               </tr>
             </thead>
             <tbody>
@@ -683,9 +710,15 @@ export default function PrescriptionModule({ settings, initialTab = "create" }: 
                       type="text"
                       required
                       value={patientName}
-                      onChange={(e) => setPatientName(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setPatientName(val);
+                        if (onActivePatientChange) {
+                          onActivePatientChange({ name: val, phone: patientMobile });
+                        }
+                      }}
                       placeholder="e.g. John Doe"
-                      className="w-full bg-white border border-gray-300 px-3 py-2 text-sm text-gray-950 focus:outline-none focus:ring-2 focus:ring-blue-800/10 focus:border-blue-800 rounded-md transition-all"
+                      className="w-full bg-white border border-gray-300 px-3 py-2 text-sm text-gray-955 focus:outline-none focus:ring-2 focus:ring-blue-800/10 focus:border-blue-800 rounded-md transition-all"
                     />
                   </div>
                   <div>
@@ -695,7 +728,13 @@ export default function PrescriptionModule({ settings, initialTab = "create" }: 
                     <input
                       type="text"
                       value={patientMobile}
-                      onChange={(e) => setPatientMobile(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setPatientMobile(val);
+                        if (onActivePatientChange) {
+                          onActivePatientChange({ name: patientName, phone: val });
+                        }
+                      }}
                       placeholder="e.g. +919876543210"
                       className="w-full bg-white border border-gray-300 px-3 py-2 text-sm text-gray-950 focus:outline-none focus:ring-2 focus:ring-blue-800/10 focus:border-blue-800 rounded-md transition-all"
                     />
@@ -813,7 +852,7 @@ export default function PrescriptionModule({ settings, initialTab = "create" }: 
                       <button
                         type="button"
                         onClick={(e) => handleDeleteMedPick(i, e)}
-                        className="p-2 mr-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors cursor-pointer shrink-0 opacity-0 group-hover:opacity-100 focus:opacity-100"
+                        className="p-2 mr-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors cursor-pointer shrink-0 opacity-100"
                         title="Delete pick template"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -852,7 +891,7 @@ export default function PrescriptionModule({ settings, initialTab = "create" }: 
                           <th className="pb-3 w-28 pl-2">Frequency</th>
                           <th className="pb-3 w-28 pl-2">Duration</th>
                           <th className="pb-3 pl-2">Instructions</th>
-                          <th className="pb-3 w-10 text-center">Remove</th>
+                          <th className="pb-3 w-28 text-center">Remove</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
@@ -909,9 +948,10 @@ export default function PrescriptionModule({ settings, initialTab = "create" }: 
                               <button
                                 type="button"
                                 onClick={() => handleRemoveMedicine(index)}
-                                className="text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-gray-100 transition-colors cursor-pointer"
+                                className="inline-flex items-center space-x-1 px-2.5 py-1 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 hover:border-red-300 rounded transition-colors cursor-pointer shadow-sm"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
+                                <span>Remove</span>
                               </button>
                             </td>
                           </tr>
