@@ -1,7 +1,8 @@
-import React, { useState } from "react";
-import { Printer, X, Receipt, Download, Bluetooth, Check, RefreshCw, AlertCircle } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Printer, X, Receipt, Download, Check, RefreshCw, AlertCircle, Server } from "lucide-react";
 import { Bill, ClinicSettings } from "./types";
-import { bluetoothPrinter } from "./BluetoothPrinter";
+import { printBridge, generateThermalPDF } from "./services/printBridge";
+import { getPrintBridgeSettings } from "./services/printBridgeConfig";
 import jsPDF from "jspdf";
 
 interface ReceiptPrintProps {
@@ -12,197 +13,83 @@ interface ReceiptPrintProps {
 
 export default function ReceiptPrint({ bill, settings, onClose }: ReceiptPrintProps) {
   const [printing, setPrinting] = useState(false);
-  const [printerConnected, setPrinterConnected] = useState(bluetoothPrinter.isConnected());
-  const [printerName, setPrinterName] = useState(bluetoothPrinter.getDeviceName());
+  const [bridgeConnected, setBridgeConnected] = useState(false);
+  const [bridgeAddress, setBridgeAddress] = useState("");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [statusType, setStatusType] = useState<"success" | "error" | "info" | null>(null);
 
-  // Re-sync bluetooth connection state from global singleton
-  const updatePrinterState = () => {
-    setPrinterConnected(bluetoothPrinter.isConnected());
-    setPrinterName(bluetoothPrinter.getDeviceName());
+  const checkBridgeStatus = async () => {
+    const config = getPrintBridgeSettings();
+    setBridgeAddress(`${config.ipAddress}:${config.port}`);
+    try {
+      const online = await printBridge.testConnection();
+      setBridgeConnected(online);
+    } catch {
+      setBridgeConnected(false);
+    }
   };
 
+  // Sync bridge status on mount
+  useEffect(() => {
+    checkBridgeStatus();
+  }, []);
+
   const handleConnectPrinter = async () => {
-    setStatusMessage("Searching for ESC/POS Bluetooth printers...");
+    setStatusMessage("Pinging Print Bridge host...");
     setStatusType("info");
+    const config = getPrintBridgeSettings();
     try {
-      const success = await bluetoothPrinter.connect();
-      updatePrinterState();
-      if (success) {
-        setStatusMessage(`Successfully paired with: ${bluetoothPrinter.getDeviceName()}`);
+      const online = await printBridge.testConnection();
+      setBridgeConnected(online);
+      if (online) {
+        setStatusMessage(`Print Bridge at ${config.ipAddress}:${config.port} is reachable!`);
         setStatusType("success");
+      } else {
+        setStatusMessage("Print Bridge Offline");
+        setStatusType("error");
       }
-    } catch (err: any) {
-      updatePrinterState();
-      setStatusMessage(err.message || "Failed to establish Bluetooth connection.");
+    } catch {
+      setBridgeConnected(false);
+      setStatusMessage("Connection Failed");
       setStatusType("error");
     }
   };
 
-  const handlePrintBT = async () => {
+  const handlePrintThermal = async () => {
     setPrinting(true);
-    setStatusMessage("Sending layout formatting bytes to Bluetooth characteristic...");
     setStatusType("info");
+    setStatusMessage("Connecting to Print Bridge...");
+    
+    // Smooth readable transition through states
+    await new Promise(resolve => setTimeout(resolve, 800));
+    
+    setStatusMessage("Printing...");
+    await new Promise(resolve => setTimeout(resolve, 600));
+
     try {
-      await bluetoothPrinter.printReceipt(bill, settings);
-      setStatusMessage("Receipt printed successfully!");
+      await printBridge.printBill(bill, settings);
+      setBridgeConnected(true);
+      setStatusMessage("Printed Successfully");
       setStatusType("success");
     } catch (err: any) {
-      setStatusMessage(err.message || "Printing failed. Make sure printer is powered on and within Bluetooth range.");
+      // Receives exactly "Print Bridge Offline", "Printer Offline", or "Connection Failed"
+      setStatusMessage(err.message || "Connection Failed");
       setStatusType("error");
     } finally {
       setPrinting(false);
-      updatePrinterState();
     }
   };
 
   const handleDownloadPDF = () => {
     try {
-      const doc = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: "a4"
-      });
-
-      // Outer border for official medical form styling
-      doc.setDrawColor(30, 64, 175); // Deep Blue
-      doc.setLineWidth(1.0);
-      doc.rect(8, 8, 194, 281, "S");
-
-      // Letterhead clinic header (Left side)
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(20);
-      doc.setTextColor(30, 64, 175); // Deep Blue (#1E40AF)
-      doc.text(settings.clinic_name.toUpperCase(), 18, 24);
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.setTextColor(107, 114, 128); // Slate gray
-
-      // Split address into multiple lines
-      const addressLines = doc.splitTextToSize(settings.address, 110);
-      doc.text(addressLines, 18, 30);
-      
-      const addressHeight = addressLines.length * 4;
-      doc.text(`Contact Phone: ${settings.phone}`, 18, 32 + addressHeight);
-
-      // Invoice metadata (Right side)
-      doc.setFontSize(11);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(55, 65, 81);
-      doc.text("INVOICE / RECEIPT", 145, 24);
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.setTextColor(75, 85, 99);
-      doc.text(`Invoice No: ${bill.bill_number}`, 145, 30);
-      doc.text(`Date      : ${bill.date}`, 145, 35);
-      doc.text(`Time      : ${bill.time}`, 145, 40);
-
-      // Divider line
-      doc.setDrawColor(229, 231, 235);
-      doc.setLineWidth(0.5);
-      doc.line(18, 46 + addressHeight, 192, 46 + addressHeight);
-
-      // Patient Details Block
-      const patientY = 52 + addressHeight;
-      doc.setFillColor(243, 244, 246);
-      doc.rect(18, patientY, 174, 18, "F");
-      doc.setDrawColor(229, 231, 235);
-      doc.rect(18, patientY, 174, 18, "S");
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
-      doc.setTextColor(55, 65, 81);
-      doc.text("Patient Name :", 24, patientY + 7);
-      doc.text("Patient Phone:", 24, patientY + 13);
-
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(17, 24, 39);
-      doc.text(bill.patient_name, 54, patientY + 7);
-      doc.setFont("helvetica", "normal");
-      doc.text(bill.patient_mobile || "N/A", 54, patientY + 13);
-
-      let startY = patientY + 28;
-
-      // Table Header for treatments
-      doc.setFillColor(30, 64, 175);
-      doc.rect(18, startY, 174, 8, "F");
-      doc.setFontSize(9.5);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(255, 255, 255);
-      doc.text("#", 22, startY + 5.5);
-      doc.text("Dental Treatment / Clinical Procedure Description", 30, startY + 5.5);
-      doc.text("Amount (INR)", 186, startY + 5.5, { align: "right" });
-      
-      startY += 8;
-
-      // Draw Items
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(31, 41, 55);
-      
-      const billItems = bill.items || bill.bill_items || [];
-      billItems.forEach((item: any, i: number) => {
-        // Alternate raw table background shading
-        if (i % 2 === 1) {
-          doc.setFillColor(249, 250, 251);
-          doc.rect(18, startY, 174, 8, "F");
-        }
-        // Draw bottom border for item row
-        doc.setDrawColor(243, 244, 246);
-        doc.line(18, startY + 8, 192, startY + 8);
-
-        doc.text(String(i + 1), 22, startY + 5.5);
-        doc.text(item.treatment_name || "Dental Treatment", 30, startY + 5.5);
-        doc.text(Number(item.amount || 0).toFixed(2), 186, startY + 5.5, { align: "right" });
-        
-        startY += 8;
-      });
-
-      // Grand Total calculations block
-      startY += 4;
-      doc.setDrawColor(209, 213, 219);
-      doc.line(18, startY, 192, startY);
-      
-      startY += 5;
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
-      doc.setTextColor(75, 85, 99);
-      doc.text(`Payment Method: ${bill.payment_method}`, 18, startY + 5);
-      
-      doc.setFontSize(12);
-      doc.setTextColor(30, 64, 175); // Deep Blue
-      doc.text(`Grand Total: INR ${Number(bill.grand_total).toFixed(2)}`, 192, startY + 5, { align: "right" });
-
-      // Signature & Doctor Stamp at bottom
-      const pageHeight = doc.internal.pageSize.height;
-      doc.setDrawColor(229, 231, 235);
-      doc.line(18, pageHeight - 38, 192, pageHeight - 38);
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
-      doc.setTextColor(55, 65, 81);
-      doc.text("Dr. V. Radhakrishnan BDS., D.Endo.", 192, pageHeight - 28, { align: "right" });
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8.5);
-      doc.setTextColor(107, 114, 128);
-      doc.text("Registered Dental Surgeon", 192, pageHeight - 23, { align: "right" });
-      doc.text("Authorized Signature & Seal", 192, pageHeight - 18, { align: "right" });
-
-      // Receipt custom Footer
-      if (settings.receipt_footer) {
-        doc.text(settings.receipt_footer, 18, pageHeight - 23);
-      } else {
-        doc.text("Thank you for choosing us for your dental healthcare!", 18, pageHeight - 23);
-      }
-
+      const receiptData = printBridge.getBillReceiptData(bill, settings);
+      const doc = generateThermalPDF(receiptData);
       doc.save(`Invoice_${bill.bill_number}.pdf`);
-      setStatusMessage("A4 Invoice PDF downloaded successfully to your iPad!");
+      setStatusMessage("80mm Thermal Receipt PDF downloaded successfully!");
       setStatusType("success");
     } catch (err: any) {
       console.error(err);
-      setStatusMessage("Failed to generate offline A4 PDF file.");
+      setStatusMessage("Failed to generate offline 80mm thermal PDF file.");
       setStatusType("error");
     }
   };
@@ -217,7 +104,7 @@ export default function ReceiptPrint({ bill, settings, onClose }: ReceiptPrintPr
         <div className="bg-zinc-950 border-b border-zinc-850 px-5 py-4 flex items-center justify-between shrink-0">
           <div className="flex items-center space-x-2">
             <Receipt className="w-4 h-4 text-emerald-500" />
-            <span className="text-xs font-bold text-zinc-300 font-mono tracking-wider uppercase">Bluetooth 80mm ESC/POS Workspace</span>
+            <span className="text-xs font-bold text-zinc-300 font-mono tracking-wider uppercase">80mm ESC/POS Printer Workspace</span>
           </div>
           <button 
             onClick={onClose} 
@@ -230,38 +117,48 @@ export default function ReceiptPrint({ bill, settings, onClose }: ReceiptPrintPr
         {/* Status Dashboard Panel */}
         <div className="bg-zinc-950 border-b border-zinc-850 px-5 py-3 shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
           
-          {/* Printer status display */}
+          {/* Print Bridge status display */}
           <div className="flex items-center space-x-2">
-            <Bluetooth className={`w-4 h-4 ${printerConnected ? "text-blue-500 animate-pulse" : "text-zinc-500"}`} />
+            <Server className={`w-4 h-4 ${bridgeConnected ? "text-emerald-500 animate-pulse" : "text-zinc-500"}`} />
             <div className="font-mono text-zinc-400">
-              PRINTER:{" "}
-              <span className={`font-bold ${printerConnected ? "text-emerald-400" : "text-amber-500"}`}>
-                {printerConnected ? printerName : "DISCONNECTED (iPad BT Standard)"}
+              PRINT BRIDGE:{" "}
+              <span className={`font-bold ${bridgeConnected ? "text-emerald-400" : "text-amber-500"}`}>
+                {bridgeAddress ? bridgeAddress : "LOADING..."} ({bridgeConnected ? "ONLINE" : "OFFLINE"})
               </span>
             </div>
           </div>
 
-          {/* Action to connect */}
+          {/* Action to test connection */}
           <button
             onClick={handleConnectPrinter}
-            className="bg-blue-800 hover:bg-blue-700 text-white font-bold px-3 py-1.5 rounded text-[10px] uppercase tracking-wider flex items-center space-x-1 border border-blue-600/30 cursor-pointer self-start sm:self-auto shrink-0 transition-colors"
+            className="bg-zinc-850 hover:bg-zinc-800 text-zinc-300 font-bold px-3 py-1.5 rounded text-[10px] uppercase tracking-wider flex items-center space-x-1 border border-zinc-750 cursor-pointer self-start sm:self-auto shrink-0 transition-colors"
           >
-            <Bluetooth className="w-3 h-3" />
-            <span>Pair Printer</span>
+            <RefreshCw className="w-3 h-3" />
+            <span>Test Connection</span>
           </button>
         </div>
 
         {/* Workspace Alerts Block */}
         {statusMessage && (
-          <div className={`px-5 py-2.5 text-xs font-mono shrink-0 flex items-start space-x-2 ${
+          <div className={`px-5 py-2.5 text-xs font-mono shrink-0 flex items-center justify-between gap-4 ${
             statusType === "success" ? "bg-emerald-950/40 border-b border-emerald-900/60 text-emerald-300" :
             statusType === "error" ? "bg-red-950/40 border-b border-red-900/60 text-red-300" :
             "bg-blue-950/40 border-b border-blue-900/60 text-blue-300"
           }`}>
-            {statusType === "success" && <Check className="w-4 h-4 mt-0.5 shrink-0" />}
-            {statusType === "error" && <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />}
-            {statusType === "info" && <RefreshCw className="w-4 h-4 mt-0.5 shrink-0 animate-spin" />}
-            <span>{statusMessage}</span>
+            <div className="flex items-start space-x-2">
+              {statusType === "success" && <Check className="w-4 h-4 mt-0.5 shrink-0" />}
+              {statusType === "error" && <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />}
+              {statusType === "info" && <RefreshCw className="w-4 h-4 mt-0.5 shrink-0 animate-spin" />}
+              <span>{statusMessage}</span>
+            </div>
+            {statusType === "error" && (
+              <button
+                onClick={handlePrintThermal}
+                className="bg-red-900/65 hover:bg-red-800 text-red-100 font-bold px-2 py-1 rounded text-[10px] uppercase border border-red-750 shrink-0 cursor-pointer transition-colors"
+              >
+                Retry
+              </button>
+            )}
           </div>
         )}
 
@@ -352,16 +249,16 @@ export default function ReceiptPrint({ bill, settings, onClose }: ReceiptPrintPr
         {/* Action Controls */}
         <div className="bg-zinc-950 border-t border-zinc-850 p-4 flex gap-2 shrink-0">
           <button
-            onClick={handlePrintBT}
+            onClick={handlePrintThermal}
             disabled={printing}
             className={`flex-1 font-mono py-2.5 px-4 text-xs font-bold flex items-center justify-center space-x-2 cursor-pointer rounded-lg shadow-md transition-all border ${
-              printerConnected 
-                ? "bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500/20" 
-                : "bg-blue-800 hover:bg-blue-700 text-white border-blue-600/30"
+              printing 
+                ? "bg-zinc-850 text-zinc-500 border-zinc-800 cursor-not-allowed" 
+                : "bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500/20"
             }`}
           >
             <Printer className="w-4 h-4" />
-            <span>{printing ? "PRINTING (ESC/POS)..." : "BLUETOOTH ESC/POS PRINT"}</span>
+            <span>{printing ? "PRINTING..." : "PRINT THERMAL SLIP"}</span>
           </button>
           
           <button

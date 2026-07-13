@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Trash2, Printer, Download, Share2, Save, FileText, Search, PlusCircle, CheckCircle, RefreshCw, Eye, Stethoscope, X, Bluetooth } from "lucide-react";
+import { Plus, Trash2, Printer, Download, Share2, Save, FileText, Search, PlusCircle, CheckCircle, RefreshCw, Eye, Stethoscope, X, Cpu } from "lucide-react";
 import { Prescription, Medicine, ClinicSettings } from "../types";
 import jsPDF from "jspdf";
 import { supabase } from "../supabaseClient";
-import { bluetoothPrinter } from "../BluetoothPrinter";
+import { printBridge, generateThermalPDF } from "../services/printBridge";
 
 interface PrescriptionModuleProps {
   settings: ClinicSettings;
@@ -297,267 +297,24 @@ export default function PrescriptionModule({ settings, initialTab = "create", ac
   };
 
   // Generate and download formal A4 PDF
+  // Generate and download standardized 80mm Thermal PDF
   const handleDownloadPDF = (pres: Prescription) => {
-    const doc = new jsPDF({
-      orientation: "portrait",
-      unit: "mm",
-      format: "a4"
-    });
-
-    // Outer border
-    doc.setDrawColor(30, 64, 175); // Deep Blue border
-    doc.setLineWidth(1.5);
-    doc.rect(5, 5, 200, 287, "S");
-
-    // Letterhead header
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(22);
-    doc.setTextColor(30, 64, 175); // Deep Blue (#1E40AF)
-    doc.text(settings.clinic_name, 15, 20);
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.setTextColor(107, 114, 128);
-    
-    // Split address into multiple lines if needed
-    const addressLines = doc.splitTextToSize(settings.address, 120);
-    doc.text(addressLines, 15, 26);
-    
-    const addressHeight = addressLines.length * 4;
-    doc.text(`Phone: ${settings.phone}`, 15, 28 + addressHeight);
-
-    // Letterhead right side (rx metadata)
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(75, 85, 99);
-    doc.text("PRESCRIPTION (Rx)", 150, 20);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Date: ${pres.date}`, 150, 26);
-    doc.text(`Doc ID: DR-RK-001`, 150, 31);
-
-    doc.setDrawColor(229, 231, 235);
-    doc.setLineWidth(0.5);
-    doc.line(15, 36 + addressHeight, 195, 36 + addressHeight);
-
-    // Patient Details
-    const patientY = 42 + addressHeight;
-    doc.setFillColor(243, 244, 246);
-    doc.rect(15, patientY, 180, 18, "F");
-    doc.setDrawColor(229, 231, 235);
-    doc.rect(15, patientY, 180, 18, "S");
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(55, 65, 81);
-    doc.text("Patient Name :", 20, patientY + 7);
-    doc.text("Patient Phone:", 20, patientY + 13);
-
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(17, 24, 39);
-    doc.text(pres.patient_name, 50, patientY + 7);
-    doc.text(pres.patient_mobile || "N/A", 50, patientY + 13);
-
-    let startY = patientY + 28;
-
-    // Doctor Clinical Notes
-    if (pres.doctor_notes) {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
-      doc.setTextColor(30, 64, 175);
-      doc.text("Clinical Notes / Diagnosis:", 15, startY);
-      
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      doc.setTextColor(55, 65, 81);
-      const notesLines = doc.splitTextToSize(pres.doctor_notes, 180);
-      doc.text(notesLines, 15, startY + 6);
-      
-      startY += 12 + notesLines.length * 5;
-    }
-
-    // Medicine Header
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
-    doc.setTextColor(30, 64, 175);
-    doc.text("Prescribed Medicines (Rx):", 15, startY);
-    startY += 6;
-
-    // Draw Table Header
-    doc.setFillColor(30, 64, 175);
-    doc.rect(15, startY, 180, 8, "F");
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(255, 255, 255);
-    doc.text("Medicine Name", 20, startY + 5.5);
-    doc.text("Dosage", 80, startY + 5.5);
-    doc.text("Frequency", 115, startY + 5.5);
-    doc.text("Duration", 145, startY + 5.5);
-    doc.text("Instructions", 168, startY + 5.5);
-    
-    startY += 8;
-
-    // Draw Items
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(31, 41, 55);
-    
-    pres.medicines.forEach((med, i) => {
-      // Background shading alternate lines
-      if (i % 2 === 1) {
-        doc.setFillColor(249, 250, 251);
-        doc.rect(15, startY, 180, 8, "F");
-      }
-      doc.text(med.name, 20, startY + 5.5);
-      doc.text(med.dosage || "--", 80, startY + 5.5);
-      doc.text(med.frequency || "--", 115, startY + 5.5);
-      doc.text(med.duration || "--", 145, startY + 5.5);
-      doc.text(med.instructions || "--", 168, startY + 5.5);
-      
-      startY += 8;
-    });
-
-    // Signature Block (Fixed near the bottom)
-    const pageHeight = doc.internal.pageSize.height;
-    doc.setDrawColor(229, 231, 235);
-    doc.line(15, pageHeight - 35, 195, pageHeight - 35);
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(55, 65, 81);
-    doc.text("Dr. V. Radhakrishnan BDS., D.Endo.", 195, pageHeight - 25, { align: "right" });
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(107, 114, 128);
-    doc.text("Registered Dental Surgeon", 195, pageHeight - 21, { align: "right" });
-    doc.text("Authorized Signature & Seal", 195, pageHeight - 17, { align: "right" });
-
-    // Footer info
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
-    doc.setTextColor(30, 64, 175);
-    doc.text("Thank you for trusting us with your dental health!", 15, pageHeight - 25);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(107, 114, 128);
-    doc.text("Complete the course of prescribed medication. Keep out of reach of children.", 15, pageHeight - 21);
-    doc.text("Contact the clinic in case of any allergy or adverse reactions.", 15, pageHeight - 17);
-
-    doc.save(`Prescription_${pres.patient_name.replace(/\s+/g, "_")}_${pres.date}.pdf`);
-  };
-
-  const handlePrintPrescription = (pres: Prescription) => {
-    const win = window.open("", "_blank");
-    if (!win) {
-      alert("Please allow popups to print prescriptions.");
-      return;
-    }
-
-    // Generate nice printable HTML markup for printing
-    win.document.write(`
-      <html>
-        <head>
-          <title>Prescription_${pres.patient_name}</title>
-          <style>
-            @media print {
-              @page { size: A4; margin: 15mm; }
-              body { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 13px; line-height: 1.5; color: #1f2937; }
-            }
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; color: #1f2937; }
-            .header { border-bottom: 3px solid #1e40af; padding-bottom: 15px; margin-bottom: 25px; display: flex; justify-content: space-between; }
-            .clinic-name { font-size: 24px; font-weight: bold; color: #1e40af; margin-bottom: 5px; }
-            .clinic-details { font-size: 11px; color: #4b5563; line-height: 1.4; }
-            .rx-title { text-align: right; }
-            .rx-title h2 { margin: 0; font-size: 20px; color: #1e40af; letter-spacing: 0.5px; }
-            .patient-box { background: #f3f4f6; border: 1px solid #e5e7eb; padding: 15px; margin-bottom: 25px; display: flex; justify-content: space-between; border-radius: 6px; }
-            .patient-col { width: 48%; }
-            .patient-row { margin-bottom: 4px; }
-            .patient-row strong { display: inline-block; width: 110px; color: #4b5563; font-size: 12px; }
-            .section-title { font-size: 14px; font-weight: bold; border-bottom: 1.5px solid #1e40af; padding-bottom: 4px; margin-bottom: 10px; color: #1e40af; text-transform: uppercase; letter-spacing: 0.5px; }
-            .notes { margin-bottom: 25px; white-space: pre-line; color: #374151; font-size: 13px; line-height: 1.5; background: #fafafa; padding: 10px; border-left: 3px solid #1e40af; }
-            .med-table { width: 100%; border-collapse: collapse; margin-bottom: 50px; table-layout: fixed; }
-            .med-table th { background: #1e40af; color: #ffffff; text-align: left; padding: 10px; font-weight: bold; font-size: 12px; border: 1px solid #1e40af; word-wrap: break-word; overflow-wrap: break-word; }
-            .med-table td { padding: 10px; border-bottom: 1px solid #e5e7eb; font-size: 12px; word-wrap: break-word; overflow-wrap: break-word; }
-            .med-table tr:nth-child(even) { background-color: #f9fafb; }
-            .signature-block { margin-top: 100px; text-align: right; border-top: 1px solid #e5e7eb; padding-top: 15px; }
-            .signature-block strong { font-size: 14px; color: #1e40af; }
-            .stamp { color: #6b7280; font-size: 10px; margin-top: 2px; line-height: 1.3; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div>
-              <div class="clinic-name">${settings.clinic_name}</div>
-              <div class="clinic-details">${settings.address.replace(/\n/g, "<br>")}</div>
-              <div class="clinic-details" style="margin-top: 3px;"><strong>Phone:</strong> ${settings.phone}</div>
-            </div>
-            <div class="rx-title">
-              <h2>PRESCRIPTION</h2>
-              <div style="font-size: 11px; color: #4b5563; margin-top: 8px; line-height: 1.4;">
-                <strong>Date:</strong> ${pres.date}<br>
-                <strong>Rx ID:</strong> RX-${pres.id || "000"}
-              </div>
-            </div>
-          </div>
-
-          <div class="patient-box">
-            <div class="patient-col">
-              <div class="patient-row"><strong>Patient Name:</strong> ${pres.patient_name}</div>
-            </div>
-            <div class="patient-col">
-              <div class="patient-row"><strong>Mobile Phone:</strong> ${pres.patient_mobile || "N/A"}</div>
-            </div>
-          </div>
-
-          ${pres.doctor_notes ? `
-            <div class="section-title">Clinical Notes & Diagnosis</div>
-            <div class="notes">${pres.doctor_notes}</div>
-          ` : ""}
-
-          <div class="section-title" style="margin-top: 25px;">Rx Medications</div>
-          <table class="med-table">
-            <thead>
-              <tr>
-                <th style="width: 25%;">Medicine Name</th>
-                <th style="width: 15%;">Dosage</th>
-                <th style="width: 15%;">Frequency</th>
-                <th style="width: 15%;">Duration</th>
-                <th style="width: 30%;">Instructions</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${pres.medicines.map(m => `
-                <tr>
-                  <td><strong>${m.name}</strong></td>
-                  <td>${m.dosage || "—"}</td>
-                  <td>${m.frequency || "—"}</td>
-                  <td>${m.duration || "—"}</td>
-                  <td>${m.instructions || "—"}</td>
-                </tr>
-              `).join("")}
-            </tbody>
-          </table>
-
-          <div class="signature-block">
-            <strong>Dr. V. Radhakrishnan BDS., D.Endo.</strong><br>
-            <span class="stamp">Registered Dental Surgeon<br>Clinic Seal / Signature</span>
-          </div>
-
-          <script>
-            window.onload = function() {
-              window.print();
-              setTimeout(function() { window.close(); }, 500);
-            };
-          </script>
-        </body>
-      </html>
-    `);
-    win.document.close();
-  };
-
-  const handleBluetoothPrintRx = async (pres: Prescription) => {
     try {
-      await bluetoothPrinter.printPrescription(pres, settings);
+      const receiptData = printBridge.getPrescriptionReceiptData(pres, settings);
+      const doc = generateThermalPDF(receiptData);
+      doc.save(`Prescription_${pres.patient_name.replace(/\s+/g, "_")}_${pres.date}.pdf`);
     } catch (err: any) {
-      alert(err.message || "Failed to print prescription via Bluetooth. Ensure the printer is powered on and within range.");
+      console.error(err);
+      alert("Failed to generate offline 80mm thermal PDF file.");
+    }
+  };
+
+  const handleThermalPrintRx = async (pres: Prescription) => {
+    try {
+      await printBridge.printPrescription(pres, settings);
+      alert("Prescription sent to Local Print Bridge successfully!");
+    } catch (err: any) {
+      alert(`Printing failed: ${err.message}. Ensure the Print Bridge is online.`);
     }
   };
 
@@ -985,19 +742,11 @@ export default function PrescriptionModule({ settings, initialTab = "create", ac
                   <div className="flex flex-wrap gap-2 shrink-0">
                     <button
                       type="button"
-                      onClick={() => handleBluetoothPrintRx(previewPrescription)}
+                      onClick={() => handleThermalPrintRx(previewPrescription)}
                       className="bg-sky-700 text-white hover:bg-sky-800 py-1.5 px-3.5 rounded-md text-xs font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer shadow-md"
                     >
-                      <Bluetooth className="w-4 h-4 animate-pulse" />
-                      <span>POS Print</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handlePrintPrescription(previewPrescription)}
-                      className="bg-white border border-gray-300 text-gray-750 hover:bg-gray-50 hover:border-gray-400 py-1.5 px-3.5 rounded-md text-xs font-semibold flex items-center justify-center space-x-1.5 transition-all cursor-pointer shadow-sm"
-                    >
-                      <Printer className="w-4 h-4 text-gray-500" />
-                      <span>Print (A4 Sheet)</span>
+                      <Cpu className="w-4 h-4" />
+                      <span>Thermal Print</span>
                     </button>
                     <button
                       type="button"
@@ -1005,7 +754,7 @@ export default function PrescriptionModule({ settings, initialTab = "create", ac
                       className="bg-white border border-gray-300 text-gray-750 hover:bg-gray-50 hover:border-gray-400 py-1.5 px-3.5 rounded-md text-xs font-semibold flex items-center justify-center space-x-1.5 transition-all cursor-pointer shadow-sm"
                     >
                       <Download className="w-4 h-4 text-gray-500" />
-                      <span>Save PDF File</span>
+                      <span>Download Thermal PDF</span>
                     </button>
                     {previewPrescription.patient_mobile && (
                       <button
@@ -1177,18 +926,18 @@ export default function PrescriptionModule({ settings, initialTab = "create", ac
                   {/* Actions Bar */}
                   <div className="border-t border-gray-200 pt-4 flex flex-wrap gap-2">
                     <button
-                      onClick={() => handlePrintPrescription(previewPrescription)}
-                      className="flex-1 bg-blue-800 hover:bg-blue-900 text-white py-2 px-3 rounded-md text-[10px] font-bold uppercase tracking-wider flex items-center justify-center space-x-1.5 cursor-pointer transition-all shadow-sm"
+                      onClick={() => handleThermalPrintRx(previewPrescription)}
+                      className="flex-1 bg-sky-700 hover:bg-sky-800 text-white py-2 px-3 rounded-md text-[10px] font-bold uppercase tracking-wider flex items-center justify-center space-x-1.5 cursor-pointer transition-all shadow-sm"
                     >
-                      <Printer className="w-3.5 h-3.5" />
-                      <span>Print</span>
+                      <Cpu className="w-3.5 h-3.5" />
+                      <span>Print Thermal</span>
                     </button>
                     <button
                       onClick={() => handleDownloadPDF(previewPrescription)}
                       className="bg-white border border-gray-300 hover:border-gray-400 text-gray-700 py-2 px-3 rounded-md text-[10px] font-bold uppercase tracking-wider flex items-center justify-center space-x-1.5 cursor-pointer transition-all shadow-sm"
                     >
                       <Download className="w-3.5 h-3.5" />
-                      <span>PDF</span>
+                      <span>Download PDF</span>
                     </button>
                     {previewPrescription.patient_mobile && (
                       <button
@@ -1289,25 +1038,18 @@ export default function PrescriptionModule({ settings, initialTab = "create", ac
             {/* Modal Footer */}
             <div className="bg-gray-50 border-t border-gray-200 px-6 py-4 flex flex-wrap gap-2 justify-end">
               <button
-                onClick={() => handleBluetoothPrintRx(selectedModalPrescription)}
+                onClick={() => handleThermalPrintRx(selectedModalPrescription)}
                 className="bg-sky-700 hover:bg-sky-800 text-white font-bold py-2 px-3.5 rounded-md text-xs uppercase tracking-wider flex items-center justify-center space-x-1.5 cursor-pointer transition-all shadow-md"
               >
-                <Bluetooth className="w-4 h-4 animate-pulse" />
-                <span>Bluetooth POS Print</span>
-              </button>
-              <button
-                onClick={() => handlePrintPrescription(selectedModalPrescription)}
-                className="bg-blue-800 hover:bg-blue-900 text-white font-bold py-2 px-3.5 rounded-md text-xs uppercase tracking-wider flex items-center justify-center space-x-1.5 cursor-pointer transition-all shadow-md"
-              >
-                <Printer className="w-4 h-4" />
-                <span>Browser Print</span>
+                <Cpu className="w-4 h-4" />
+                <span>Print Thermal</span>
               </button>
               <button
                 onClick={() => handleDownloadPDF(selectedModalPrescription)}
                 className="bg-white border border-gray-300 hover:bg-gray-50 hover:border-gray-400 text-gray-700 font-bold py-2 px-3.5 rounded-md text-xs uppercase tracking-wider flex items-center justify-center space-x-1.5 cursor-pointer transition-all shadow-sm"
               >
                 <Download className="w-4 h-4" />
-                <span>PDF Download</span>
+                <span>Download Thermal PDF</span>
               </button>
               {selectedModalPrescription.patient_mobile && (
                 <button
