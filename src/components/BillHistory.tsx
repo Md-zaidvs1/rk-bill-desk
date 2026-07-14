@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Search, Receipt, Trash2, ShieldAlert, Calendar, CreditCard, RefreshCw, Landmark, CircleDollarSign } from "lucide-react";
 import { Bill, ClinicSettings } from "../types";
-import ReceiptPrint from "../ReceiptPrint";
+import { triggerThermalBillPrint } from "../services/printBridge";
 import { supabase } from "../supabaseClient";
 
 interface BillHistoryProps {
@@ -79,8 +79,7 @@ export default function BillHistory({ settings }: BillHistoryProps) {
         items: data.bill_items || data.items || []
       };
 
-      setSelectedBill(mappedBill);
-      setShowReceipt(true);
+      triggerThermalBillPrint(mappedBill, settings);
     } catch (err: any) {
       alert(err.message || "Could not fetch detailed bill items.");
     }
@@ -248,11 +247,11 @@ export default function BillHistory({ settings }: BillHistoryProps) {
                     <div className="flex justify-center space-x-2">
                       <button
                         onClick={() => handleViewBill(bill.id)}
-                        title="Reprint / View Thermal Receipt"
+                        title="View & Print Thermal Receipt"
                         className="bg-white border border-gray-300 text-blue-800 hover:bg-blue-50/10 hover:border-blue-800 px-2 py-1 text-[10px] font-bold rounded flex items-center space-x-1 cursor-pointer transition-all shadow-sm"
                       >
                         <Receipt className="w-3.5 h-3.5 text-blue-800" />
-                        <span>Reprint</span>
+                        <span>View & Print</span>
                       </button>
                       
                       <button
@@ -270,18 +269,6 @@ export default function BillHistory({ settings }: BillHistoryProps) {
           </table>
         )}
       </div>
-
-      {/* 80mm Receipt Modal */}
-      {showReceipt && selectedBill && (
-        <ReceiptPrint
-          bill={selectedBill}
-          settings={settings}
-          onClose={() => {
-            setSelectedBill(null);
-            setShowReceipt(false);
-          }}
-        />
-      )}
     </div>
   );
 }

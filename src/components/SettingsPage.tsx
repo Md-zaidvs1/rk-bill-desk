@@ -20,6 +20,17 @@ export default function SettingsPage({ settings, user, onSettingsUpdate, onUserU
   const [receiptFooter, setReceiptFooter] = useState(settings.receipt_footer);
   const [whatsappTemplate, setWhatsappTemplate] = useState(settings.whatsapp_message_template);
 
+  // New customized logo and footer state
+  const [billLogoType, setBillLogoType] = useState<"logo" | "icon" | "none">(
+    settings.bill_header_logo_type || "icon"
+  );
+  const [clinicLogoBase64, setClinicLogoBase64] = useState<string>(
+    settings.clinic_logo_base64 || ""
+  );
+  const [billFooterMessage, setBillFooterMessage] = useState<string>(
+    settings.bill_footer_message || "Thank you for choosing RK Dental Clinic."
+  );
+
   // Print Bridge Configuration State
   const [bridgeIP, setBridgeIP] = useState("192.168.1.50");
   const [bridgePort, setBridgePort] = useState<number>(3001);
@@ -116,6 +127,43 @@ export default function SettingsPage({ settings, user, onSettingsUpdate, onUserU
     }
   };
 
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        alert("Image is too large. Please upload a logo smaller than 2MB.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (uploadEvent) => {
+        const base64String = uploadEvent.target?.result as string;
+        setClinicLogoBase64(base64String);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleLogoDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleLogoDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      if (file.size > 2 * 1024 * 1024) {
+        alert("Image is too large. Please upload a logo smaller than 2MB.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (uploadEvent) => {
+        const base64String = uploadEvent.target?.result as string;
+        setClinicLogoBase64(base64String);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   // Security State
   const [newUsername, setNewUsername] = useState(user.username);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -159,9 +207,18 @@ export default function SettingsPage({ settings, user, onSettingsUpdate, onUserU
         throw new Error(err.message);
       }
 
-      setSettingsSuccess("Clinic profile settings saved successfully to cloud!");
+      // Save custom extra settings to localStorage
+      const extraSettings = {
+        bill_header_logo_type: billLogoType,
+        clinic_logo_base64: clinicLogoBase64,
+        bill_footer_message: billFooterMessage.trim()
+      };
+      localStorage.setItem("rk_bill_desk_extra_settings", JSON.stringify(extraSettings));
+
+      setSettingsSuccess("Clinic profile settings and PDF customizations saved successfully!");
       // If direct single row was returned, pass it, otherwise fallback to values
-      const updatedRecord = (data && data.length > 0) ? data[0] : { id: targetId, ...updatedValues };
+      const dbRecord = (data && data.length > 0) ? data[0] : { id: targetId, ...updatedValues };
+      const updatedRecord = { ...dbRecord, ...extraSettings };
       onSettingsUpdate(updatedRecord);
     } catch (err: any) {
       setSettingsError(err.message || "Failed to save profile settings to cloud database.");
@@ -344,6 +401,122 @@ export default function SettingsPage({ settings, user, onSettingsUpdate, onUserU
               placeholder="e.g. Thank you for your visit! Keep smiling."
               className="w-full bg-white border border-gray-300 px-3 py-2 text-sm text-gray-950 focus:outline-none focus:ring-2 focus:ring-blue-800/10 focus:border-blue-800 rounded-md transition-all font-sans"
             />
+          </div>
+
+          {/* Logo & Bill Footer PDF Customizations */}
+          <div className="border-t border-gray-200 pt-5 mt-5 space-y-4">
+            <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center space-x-2">
+              <span className="w-1.5 h-3 bg-blue-800 rounded-full inline-block"></span>
+              <span>Bill PDF Styling & Customizations</span>
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {/* Bill Header Logo Type Selector */}
+              <div className="space-y-2">
+                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                  Bill Header Logo Type
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setBillLogoType("logo")}
+                    className={`flex flex-col items-center justify-center p-3 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
+                      billLogoType === "logo"
+                        ? "bg-blue-50 border-blue-500 text-blue-900 shadow-sm"
+                        : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
+                    }`}
+                  >
+                    <span className="text-lg mb-1">🖼️</span>
+                    <span>Clinic Logo</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBillLogoType("icon")}
+                    className={`flex flex-col items-center justify-center p-3 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
+                      billLogoType === "icon"
+                        ? "bg-blue-50 border-blue-500 text-blue-900 shadow-sm"
+                        : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
+                    }`}
+                  >
+                    <span className="text-lg mb-1">➕</span>
+                    <span>Medical "+"</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBillLogoType("none")}
+                    className={`flex flex-col items-center justify-center p-3 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
+                      billLogoType === "none"
+                        ? "bg-blue-50 border-blue-500 text-blue-900 shadow-sm"
+                        : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
+                    }`}
+                  >
+                    <span className="text-lg mb-1">❌</span>
+                    <span>No Logo</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Dynamic Clinic Logo File Upload with Drag & Drop */}
+              <div className="space-y-2">
+                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                  Clinic Logo File
+                </label>
+                {clinicLogoBase64 ? (
+                  <div className="flex items-center space-x-3 bg-gray-50 border border-gray-200 p-2 rounded-lg">
+                    <img
+                      src={clinicLogoBase64}
+                      alt="Clinic Logo Preview"
+                      referrerPolicy="no-referrer"
+                      className="w-12 h-12 object-contain bg-white border border-gray-200 rounded-md p-1"
+                    />
+                    <div className="flex-1 overflow-hidden">
+                      <p className="text-xs font-semibold text-gray-700 truncate">Uploaded Logo</p>
+                      <button
+                        type="button"
+                        onClick={() => setClinicLogoBase64("")}
+                        className="text-[10px] text-red-600 font-bold hover:underline cursor-pointer"
+                      >
+                        Remove logo
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    onDragOver={handleLogoDragOver}
+                    onDrop={handleLogoDrop}
+                    className="border-2 border-dashed border-gray-300 rounded-lg p-3 text-center hover:bg-gray-50 transition-all cursor-pointer relative"
+                  >
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleLogoUpload}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
+                    <p className="text-xs text-gray-600 font-semibold">
+                      Drag & drop or <span className="text-blue-800 underline">browse</span>
+                    </p>
+                    <p className="text-[9px] text-gray-400 mt-0.5">Supports PNG, JPG (Max 2MB)</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Bill Footer Message Setting */}
+            <div className="space-y-1">
+              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                Bill Footer Message (Replaces old hardcoded Thank You text)
+              </label>
+              <textarea
+                rows={2}
+                value={billFooterMessage}
+                onChange={(e) => setBillFooterMessage(e.target.value)}
+                placeholder="e.g. Thank you for choosing RK Dental Clinic."
+                className="w-full bg-white border border-gray-300 p-3 text-sm text-gray-950 focus:outline-none focus:ring-2 focus:ring-blue-800/10 focus:border-blue-800 rounded-md transition-all font-sans leading-relaxed"
+              />
+              <p className="text-[10px] text-gray-400 leading-tight">
+                This custom text message will be printed in high contrast centered lines at the very bottom of every generated Bill Invoice PDF.
+              </p>
+            </div>
           </div>
 
           <div className="border-t border-gray-200 pt-4 mt-6">

@@ -17,8 +17,32 @@ const DEFAULT_SETTINGS = {
 };
 
 const DEFAULT_USERS = [
-  { id: 1, username: "RK Dental Clinic", password: "admin123", name: "Dr. V. Radhakrishnan BDS., D.Endo." }
+  { id: 1, username: "RK Dental Clinic", password: "admin123", name: "Dr. V. Radhakrishnan BDS., D.Endo.", role: "doctor" },
+  { id: 2, username: "receptionist", password: "receptionist123", name: "Clinic Receptionist", role: "receptionist" }
 ];
+
+// Ensure receptionist user and roles are backfilled in local storage cache
+if (typeof window !== "undefined") {
+  const cachedUsers = localStorage.getItem("rk_fallback_users");
+  if (cachedUsers) {
+    try {
+      const users = JSON.parse(cachedUsers);
+      const doctor = users.find((u: any) => u.id === 1);
+      if (doctor && !doctor.role) {
+        doctor.role = "doctor";
+      }
+      const hasReceptionist = users.some((u: any) => u.username === "receptionist");
+      if (!hasReceptionist) {
+        users.push({ id: 2, username: "receptionist", password: "receptionist123", name: "Clinic Receptionist", role: "receptionist" });
+      }
+      localStorage.setItem("rk_fallback_users", JSON.stringify(users));
+    } catch (e) {
+      localStorage.setItem("rk_fallback_users", JSON.stringify(DEFAULT_USERS));
+    }
+  } else {
+    localStorage.setItem("rk_fallback_users", JSON.stringify(DEFAULT_USERS));
+  }
+}
 
 // Helper to initialize local storage
 const getLocalStorageItem = (key: string, defaultValue: any) => {
@@ -347,6 +371,29 @@ class RobustQueryBuilder {
 }
 
 const realSupabase = isSupabaseConfigured ? createClient(supabaseUrl, supabaseAnonKey) : null;
+
+export const seedDefaultUsers = async () => {
+  if (!isSupabaseConfigured) return;
+  try {
+    const { data: existingUsers, error } = await supabase.from("users").select("username");
+    if (error) {
+      console.warn("[Supabase Seeder] Could not read existing users:", error.message);
+      return;
+    }
+    const usernames = (existingUsers || []).map((u: any) => u.username);
+    const missingUsers = DEFAULT_USERS.filter(du => !usernames.includes(du.username));
+    
+    if (missingUsers.length > 0) {
+      console.log("[Supabase Seeder] Inserting missing default users...", missingUsers);
+      const { error: insertErr } = await supabase.from("users").insert(missingUsers);
+      if (insertErr) {
+        console.warn("[Supabase Seeder] Insert failed:", insertErr.message);
+      }
+    }
+  } catch (err: any) {
+    console.warn("[Supabase Seeder] Auto-seed error:", err.message || err);
+  }
+};
 
 // Fallback / Wrapped Supabase Client exports
 export const supabase = {

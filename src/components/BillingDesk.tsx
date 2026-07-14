@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Trash2, Receipt, Save, RefreshCw, UserCheck, ShieldCheck, CreditCard, Banknote, HelpCircle } from "lucide-react";
+import { Plus, Trash2, Receipt, Save, RefreshCw, UserCheck, ShieldCheck, CreditCard, Banknote, HelpCircle, Printer, Wifi, AlertCircle, CheckCircle } from "lucide-react";
 import { Bill, BillItem, ClinicSettings } from "../types";
-import ReceiptPrint from "../ReceiptPrint";
+import { triggerThermalBillPrint } from "../services/printBridge";
 import { supabase } from "../supabaseClient";
 
 interface BillingDeskProps {
@@ -206,7 +206,8 @@ export default function BillingDesk({ settings, activePatient, onActivePatientCh
             patient_name: patientName.trim(),
             patient_mobile: patientMobile.trim(),
             grand_total: grandTotal,
-            payment_method: paymentMethod
+            payment_method: paymentMethod,
+            printed: false
           }
         ])
         .select();
@@ -240,7 +241,7 @@ export default function BillingDesk({ settings, activePatient, onActivePatientCh
 
       setSuccess(`Bill ${billNumber} generated successfully!`);
       setGeneratedBill(finalBill);
-      setShowReceipt(true);
+      triggerThermalBillPrint(finalBill, settings);
     } catch (err: any) {
       setError(err.message || "Failed to register bill on cloud database.");
     } finally {
@@ -287,11 +288,11 @@ export default function BillingDesk({ settings, activePatient, onActivePatientCh
           </div>
           {generatedBill && (
             <button
-              onClick={() => setShowReceipt(true)}
+              onClick={() => triggerThermalBillPrint(generatedBill, settings)}
               className="bg-blue-800 text-white text-[10px] uppercase font-bold tracking-wider py-1.5 px-3.5 hover:bg-blue-900 flex items-center justify-center space-x-1.5 cursor-pointer rounded-md shadow-sm transition-all shrink-0 self-start sm:self-auto"
             >
               <Receipt className="w-3.5 h-3.5" />
-              <span>Print/View Thermal Slip</span>
+              <span>View & Print Thermal Slip</span>
             </button>
           )}
         </div>
@@ -538,14 +539,6 @@ export default function BillingDesk({ settings, activePatient, onActivePatientCh
 
       </form>
 
-      {/* 80mm Receipt Modal */}
-      {showReceipt && generatedBill && (
-        <ReceiptPrint
-          bill={generatedBill}
-          settings={settings}
-          onClose={() => setShowReceipt(false)}
-        />
-      )}
     </div>
   );
 }

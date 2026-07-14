@@ -2,15 +2,19 @@ export interface User {
   id: number;
   username: string;
   name: string;
+  role?: string;
 }
 
 export interface ClinicSettings {
-  id: number;
+  id: number | string;
   clinic_name: string;
   address: string;
   phone: string;
   receipt_footer: string;
   whatsapp_message_template: string;
+  bill_header_logo_type?: "logo" | "icon" | "none";
+  clinic_logo_base64?: string;
+  bill_footer_message?: string;
 }
 
 export interface BillItem {
@@ -31,6 +35,7 @@ export interface Bill {
   payment_method: string;
   items?: BillItem[];
   bill_items?: BillItem[];
+  printed?: boolean;
 }
 
 export interface Medicine {

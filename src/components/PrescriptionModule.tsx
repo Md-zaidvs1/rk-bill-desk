@@ -3,7 +3,7 @@ import { Plus, Trash2, Printer, Download, Share2, Save, FileText, Search, PlusCi
 import { Prescription, Medicine, ClinicSettings } from "../types";
 import jsPDF from "jspdf";
 import { supabase } from "../supabaseClient";
-import { printBridge, generateThermalPDF } from "../services/printBridge";
+import { printBridge, generateThermalPDF, generateA4PrescriptionPDF } from "../services/printBridge";
 
 interface PrescriptionModuleProps {
   settings: ClinicSettings;
@@ -297,15 +297,13 @@ export default function PrescriptionModule({ settings, initialTab = "create", ac
   };
 
   // Generate and download formal A4 PDF
-  // Generate and download standardized 80mm Thermal PDF
   const handleDownloadPDF = (pres: Prescription) => {
     try {
-      const receiptData = printBridge.getPrescriptionReceiptData(pres, settings);
-      const doc = generateThermalPDF(receiptData);
+      const doc = generateA4PrescriptionPDF(pres, settings);
       doc.save(`Prescription_${pres.patient_name.replace(/\s+/g, "_")}_${pres.date}.pdf`);
     } catch (err: any) {
       console.error(err);
-      alert("Failed to generate offline 80mm thermal PDF file.");
+      alert("Failed to generate offline professional A4 prescription PDF file.");
     }
   };
 
@@ -385,38 +383,40 @@ export default function PrescriptionModule({ settings, initialTab = "create", ac
     <div className="bg-white border border-gray-250 p-6 shadow-sm rounded-lg">
       
       {/* Dynamic Tabs Navigation Header inside module */}
-      <div className="flex border-b border-gray-200 mb-6 gap-2">
-        <button
-          onClick={() => {
-            setActiveTab("create");
-            setSuccess(null);
-            setError(null);
-          }}
-          className={`py-2.5 px-5 text-xs font-bold uppercase tracking-wider cursor-pointer rounded-t-lg border-t border-x -mb-[1px] transition-all flex items-center space-x-2 ${
-            activeTab === "create"
-              ? "border-gray-200 border-b-white bg-white text-blue-800"
-              : "border-transparent bg-gray-50 text-gray-500 hover:text-gray-800"
-          }`}
-        >
-          <PlusCircle className="w-4 h-4 text-blue-800" />
-          <span>Create Prescription</span>
-        </button>
-        <button
-          onClick={() => {
-            setActiveTab("history");
-            setSuccess(null);
-            setError(null);
-          }}
-          className={`py-2.5 px-5 text-xs font-bold uppercase tracking-wider cursor-pointer rounded-t-lg border-t border-x -mb-[1px] transition-all flex items-center space-x-2 ${
-            activeTab === "history"
-              ? "border-gray-200 border-b-white bg-white text-blue-800"
-              : "border-transparent bg-gray-50 text-gray-500 hover:text-gray-800"
-          }`}
-        >
-          <FileText className="w-4 h-4 text-blue-800" />
-          <span>Search Archives</span>
-        </button>
-      </div>
+      {initialTab !== "history" && (
+        <div className="flex border-b border-gray-200 mb-6 gap-2">
+          <button
+            onClick={() => {
+              setActiveTab("create");
+              setSuccess(null);
+              setError(null);
+            }}
+            className={`py-2.5 px-5 text-xs font-bold uppercase tracking-wider cursor-pointer rounded-t-lg border-t border-x -mb-[1px] transition-all flex items-center space-x-2 ${
+              activeTab === "create"
+                ? "border-gray-200 border-b-white bg-white text-blue-800"
+                : "border-transparent bg-gray-50 text-gray-500 hover:text-gray-800"
+            }`}
+          >
+            <PlusCircle className="w-4 h-4 text-blue-800" />
+            <span>Create Prescription</span>
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab("history");
+              setSuccess(null);
+              setError(null);
+            }}
+            className={`py-2.5 px-5 text-xs font-bold uppercase tracking-wider cursor-pointer rounded-t-lg border-t border-x -mb-[1px] transition-all flex items-center space-x-2 ${
+              activeTab === "history"
+                ? "border-gray-200 border-b-white bg-white text-blue-800"
+                : "border-transparent bg-gray-50 text-gray-500 hover:text-gray-800"
+            }`}
+          >
+            <FileText className="w-4 h-4 text-blue-800" />
+            <span>Search Archives</span>
+          </button>
+        </div>
+      )}
 
       {activeTab === "create" ? (
         // CREATE TAB

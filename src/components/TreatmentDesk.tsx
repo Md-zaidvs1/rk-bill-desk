@@ -6,9 +6,8 @@ import {
 } from "lucide-react";
 import { Bill, BillItem, ClinicSettings, Medicine, Prescription } from "../types";
 import { supabase } from "../supabaseClient";
-import ReceiptPrint from "../ReceiptPrint";
 import jsPDF from "jspdf";
-import { printBridge, generateThermalPDF } from "../services/printBridge";
+import { printBridge, generateThermalPDF, generateThermalReceiptPDF, generateA4InvoicePDF, triggerThermalBillPrint, generateA4PrescriptionPDF } from "../services/printBridge";
 
 interface TreatmentDeskProps {
   settings: ClinicSettings;
@@ -154,7 +153,6 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
   const [showExportModal, setShowExportModal] = useState(false);
   const [savedBillRecord, setSavedBillRecord] = useState<Bill | null>(null);
   const [savedPresRecord, setSavedPresRecord] = useState<Prescription | null>(null);
-  const [showReceiptPrint, setShowReceiptPrint] = useState(false);
   const [shareMessage, setShareMessage] = useState<{ type: string; text: string } | null>(null);
 
   // --- Handlers for Billing Desk Actions ---
@@ -296,7 +294,8 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
               patient_name: patientName.trim(),
               patient_mobile: patientMobile.trim(),
               grand_total: grandTotal,
-              payment_method: paymentMethod
+              payment_method: paymentMethod,
+              printed: false
             }
           ])
           .select();
@@ -369,8 +368,7 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
   // --- Export PDF Handlers ---
   const handleDownloadPrescriptionPDF = (pres: Prescription) => {
     try {
-      const receiptData = printBridge.getPrescriptionReceiptData(pres, settings);
-      const doc = generateThermalPDF(receiptData);
+      const doc = generateA4PrescriptionPDF(pres, settings);
       doc.save(`Prescription_${pres.patient_name.replace(/\s+/g, "_")}_${pres.date}.pdf`);
     } catch (err) {
       console.error("PDF generation failed:", err);
@@ -380,7 +378,7 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
   const handleDownloadInvoicePDF = (bill: Bill) => {
     try {
       const receiptData = printBridge.getBillReceiptData(bill, settings);
-      const doc = generateThermalPDF(receiptData);
+      const doc = generateA4InvoicePDF(receiptData);
       doc.save(`Invoice_${bill.patient_name.replace(/\s+/g, "_")}_${bill.bill_number}.pdf`);
     } catch (err) {
       console.error("Invoice PDF generation failed:", err);
@@ -407,7 +405,7 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
 
       // 1. Generate Invoice PDF
       const receiptData = printBridge.getBillReceiptData(bill, settings);
-      const docBill = generateThermalPDF(receiptData);
+      const docBill = generateA4InvoicePDF(receiptData);
       docBill.save(`Invoice_${bill.patient_name.replace(/\s+/g, "_")}_${bill.bill_number}.pdf`);
 
       // 2. Format a clean text summary block containing only the billing/invoice details
@@ -545,25 +543,31 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
     <div className="space-y-6">
       
       {/* 1. UNIFIED ACTIVE PATIENT SESSION HEADER */}
-      <div className="bg-white border border-gray-200 rounded-xl shadow-md p-4 md:p-5 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
-        <div className="flex items-center space-x-3.5">
-          <div className="bg-blue-50 text-blue-800 p-2.5 rounded-lg border border-blue-100 flex items-center justify-center shrink-0">
-            <UserCheck className="w-5 h-5 text-blue-800" />
+      <div className="bg-white border border-violet-100/80 rounded-2xl shadow-xl p-5 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-5 relative overflow-hidden">
+        {/* Subtle gold line on top to give a premium touch */}
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 via-violet-600 to-amber-400"></div>
+
+        <div className="flex items-center space-x-3.5 relative z-10">
+          <div className="bg-violet-550/10 text-violet-700 p-3 rounded-xl border border-violet-100 flex items-center justify-center shrink-0">
+            <UserCheck className="w-5 h-5 text-violet-600" />
           </div>
           <div className="min-w-0">
-            <h3 className="font-extrabold text-gray-950 text-base tracking-tight">
-              Treatment Desk
+            <h3 className="font-extrabold text-violet-950 text-base tracking-tight flex items-center gap-2">
+              <span>Treatment Desk</span>
+              <span className="bg-amber-100 text-amber-800 border border-amber-200 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+                Elite Suite
+              </span>
             </h3>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-xs text-zinc-500 mt-1">
               {patientName.trim() 
-                ? `Active Patient: ${patientName} ${patientMobile ? `(${patientMobile})` : ""}`
-                : "Type patient details below to synchronize invoice & drug chart lines."}
+                ? `Active Session: ${patientName} ${patientMobile ? `(${patientMobile})` : ""}`
+                : "Enter patient name & phone below to begin procedure costing and prescription rx lines."}
             </p>
           </div>
         </div>
 
         {/* Unified Input Boxes - Syncs Billing & Prescriptions simultaneously */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto lg:max-w-3xl lg:flex-1 justify-end">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto lg:max-w-3xl lg:flex-1 justify-end relative z-10">
           <div className="relative flex-1">
             <input
               type="text"
@@ -571,7 +575,7 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
               value={patientName}
               onChange={(e) => handlePatientHeaderChange(e.target.value, patientMobile)}
               placeholder="Patient Full Name (Required)"
-              className="w-full bg-white border border-gray-300 px-3.5 h-[44px] text-xs text-gray-950 focus:outline-none focus:ring-2 focus:ring-blue-800/10 focus:border-blue-800 rounded-lg font-semibold transition-all shadow-xs"
+              className="w-full bg-zinc-50/50 border border-zinc-200 px-4 h-[44px] text-xs text-zinc-950 focus:outline-none focus:ring-4 focus:ring-violet-600/10 focus:border-violet-600 focus:bg-white rounded-xl font-bold transition-all shadow-xs placeholder-zinc-400"
             />
           </div>
           
@@ -581,7 +585,7 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
               value={patientMobile}
               onChange={(e) => handlePatientHeaderChange(patientName, e.target.value)}
               placeholder="Mobile Phone Number"
-              className="w-full bg-white border border-gray-300 px-3.5 h-[44px] text-xs text-gray-950 focus:outline-none focus:ring-2 focus:ring-blue-800/10 focus:border-blue-800 rounded-lg font-semibold transition-all shadow-xs"
+              className="w-full bg-zinc-50/50 border border-zinc-200 px-4 h-[44px] text-xs text-zinc-950 focus:outline-none focus:ring-4 focus:ring-violet-600/10 focus:border-violet-600 focus:bg-white rounded-xl font-bold transition-all shadow-xs placeholder-zinc-400"
             />
           </div>
 
@@ -590,7 +594,7 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
               type="button"
               onClick={handleSaveSession}
               disabled={saving}
-              className="bg-blue-800 hover:bg-blue-900 disabled:bg-gray-200 disabled:text-gray-400 text-white text-xs font-black px-6 h-[44px] rounded-lg shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 active:scale-95 border border-blue-900"
+              className="bg-violet-600 hover:bg-violet-700 disabled:bg-zinc-200 disabled:text-zinc-400 text-white text-xs font-extrabold px-6 h-[44px] rounded-xl shadow-lg shadow-violet-600/15 hover:shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 active:scale-95 border border-violet-700/30"
               title="Save clinical inputs to database"
             >
               {saving ? (
@@ -605,7 +609,7 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
               <button
                 type="button"
                 onClick={handleResetWorkspace}
-                className="bg-gray-50 hover:bg-gray-100 border border-gray-300 text-gray-750 font-bold w-[44px] h-[44px] rounded-lg transition-all flex items-center justify-center cursor-pointer hover:text-red-600 hover:border-red-200 shrink-0"
+                className="bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-700 font-bold w-[44px] h-[44px] rounded-xl transition-all flex items-center justify-center cursor-pointer hover:text-red-600 hover:border-red-200 shrink-0"
                 title="Clear session and workspace inputs"
               >
                 <UserX className="w-4 h-4" />
@@ -616,7 +620,7 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 p-4 text-xs font-mono rounded-lg shadow-sm flex items-start gap-2.5">
+        <div className="bg-red-50 border border-red-200 text-red-700 p-4 text-xs font-mono rounded-xl shadow-sm flex items-start gap-2.5 animate-in fade-in slide-in-from-top-1 duration-150">
           <X className="w-4 h-4 text-red-600 shrink-0 mt-0.5 cursor-pointer" onClick={() => setError(null)} />
           <div className="flex-1">{error}</div>
         </div>
@@ -626,13 +630,13 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         
         {/* ==================== LEFT COLUMN: BILLING DESK ==================== */}
-        <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm space-y-5">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+        <div className="bg-white border border-zinc-200/80 rounded-2xl p-5 shadow-xl space-y-5">
+          <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
             <div className="flex items-center space-x-2">
-              <Receipt className="w-4 h-4 text-blue-800" />
-              <h3 className="font-bold text-gray-900 text-sm tracking-tight">Procedure Billing & Costing</h3>
+              <Receipt className="w-4 h-4 text-violet-600" />
+              <h3 className="font-extrabold text-violet-950 text-sm tracking-tight">Procedure Billing & Costing</h3>
             </div>
-            <span className="text-[10px] bg-blue-50 text-blue-800 border border-blue-100 font-bold px-2 py-0.5 uppercase tracking-wide rounded">
+            <span className="text-[10px] bg-violet-50 text-violet-700 border border-violet-100 font-extrabold px-2.5 py-0.5 uppercase tracking-wider rounded-lg">
               Total: ₹{grandTotal}
             </span>
           </div>
@@ -640,47 +644,47 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
           {/* Quick templates wrapper */}
           <div className="space-y-2">
             <div className="flex justify-between items-center">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Dental Treatments Quick-Picks</label>
+              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block font-mono">Dental Treatments Quick-Picks</label>
               <button
                 type="button"
                 onClick={() => setShowAddTreatmentForm(!showAddTreatmentForm)}
-                className="text-[10px] font-bold text-blue-800 hover:underline cursor-pointer"
+                className="text-[10px] font-bold text-violet-700 hover:text-violet-900 cursor-pointer transition-colors"
               >
-                {showAddTreatmentForm ? "Close Creator" : "Create New Custom Template"}
+                {showAddTreatmentForm ? "Close Creator" : "Create Custom Template"}
               </button>
             </div>
 
             {showAddTreatmentForm && (
-              <div className="bg-gray-50 p-3 border border-gray-200 rounded-lg space-y-2 text-xs">
+              <div className="bg-zinc-50 p-4 border border-zinc-200 rounded-xl space-y-2.5 text-xs animate-in fade-in duration-150">
                 <input
                   type="text"
                   placeholder="Treatment Name (e.g. Root Canal Treatment)"
                   value={newTreatmentPickName}
                   onChange={(e) => setNewTreatmentPickName(e.target.value)}
-                  className="w-full bg-white border border-gray-300 px-2.5 py-1.5 h-[40px] text-xs text-gray-950 rounded focus:outline-none focus:border-blue-800 font-semibold"
+                  className="w-full bg-white border border-zinc-200 px-3 py-2 h-[40px] text-xs text-zinc-950 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-600/15 focus:border-violet-600 font-semibold"
                 />
                 <div className="relative">
-                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">₹</span>
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400">₹</span>
                   <input
                     type="number"
                     placeholder="Price (e.g. 3500)"
                     value={newTreatmentPickAmount}
                     onChange={(e) => setNewTreatmentPickAmount(e.target.value)}
-                    className="w-full bg-white border border-gray-300 pl-6 pr-2 py-1 h-[40px] text-xs text-gray-950 rounded focus:outline-none focus:border-blue-800"
+                    className="w-full bg-white border border-zinc-200 pl-7 pr-3 py-2 h-[40px] text-xs text-zinc-950 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-600/15 focus:border-violet-600 font-mono font-bold"
                   />
                 </div>
                 <div className="flex justify-end gap-1.5 pt-1">
-                  <button type="button" onClick={() => setShowAddTreatmentForm(false)} className="px-2 py-1 text-[10px] text-gray-500 font-semibold">Cancel</button>
-                  <button type="button" onClick={handleAddTreatmentPick} className="bg-blue-800 hover:bg-blue-900 text-white px-2.5 py-1 text-[10px] font-bold rounded">Add Template</button>
+                  <button type="button" onClick={() => setShowAddTreatmentForm(false)} className="px-3 py-1.5 text-xs text-zinc-500 font-semibold hover:text-zinc-800">Cancel</button>
+                  <button type="button" onClick={handleAddTreatmentPick} className="bg-violet-600 hover:bg-violet-750 text-white px-3.5 py-1.5 text-xs font-bold rounded-lg shadow-sm">Add Template</button>
                 </div>
               </div>
             )}
 
-            <div className="flex flex-wrap gap-1.5 max-h-[140px] overflow-y-auto border border-gray-100 p-2 rounded-md bg-gray-50/30">
+            <div className="flex flex-wrap gap-1.5 max-h-[140px] overflow-y-auto border border-zinc-150 p-2.5 rounded-xl bg-zinc-50/50">
               {treatmentPicks.map((tpl, idx) => (
                 <div
                   key={idx}
-                  className="bg-gray-50 border border-gray-200 text-gray-700 text-[10px] px-2 py-1 rounded hover:bg-blue-50 hover:border-blue-300 hover:text-blue-900 transition-all font-semibold flex items-center space-x-1 cursor-pointer shrink-0"
+                  className="bg-white border border-zinc-200 text-zinc-700 text-[10px] px-2.5 py-1.5 rounded-lg hover:bg-violet-50 hover:border-violet-300 hover:text-violet-900 transition-all font-semibold flex items-center space-x-1 cursor-pointer shrink-0 shadow-xs"
                 >
                   <button 
                     type="button" 
@@ -706,36 +710,36 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
               <button
                 type="button"
                 onClick={handleAddTreatmentRow}
-                className="w-full border border-dashed border-gray-300 hover:border-blue-800 hover:bg-blue-50/20 py-2.5 text-xs font-bold text-blue-800 hover:text-blue-900 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer h-[44px]"
+                className="w-full border border-dashed border-violet-300 hover:border-violet-600 hover:bg-violet-50/20 py-2.5 text-xs font-bold text-violet-700 hover:text-violet-900 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer h-[44px]"
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Add Manual Bill</span>
+                <Plus className="w-4 h-4" />
+                <span>Add Manual Procedure</span>
               </button>
             </div>
           </div>
 
           {/* Billing items form */}
           <div className="space-y-3">
-            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Billed Treatments</label>
-            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block font-mono">Billed Treatments</label>
+            <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
               {selectedTreatments.map((item, index) => (
-                <div key={index} className="bg-gray-50 p-3 rounded-lg border border-gray-200 relative">
-                  <div className="flex items-center gap-2">
+                <div key={index} className="bg-zinc-50 p-3 rounded-xl border border-zinc-200 relative animate-in fade-in duration-100">
+                  <div className="flex items-center gap-2.5">
                     <input
                       type="text"
                       placeholder="Treatment Name (e.g. Root Canal)"
                       value={item.treatment_name}
                       onChange={(e) => handleTreatmentChange(index, "treatment_name", e.target.value)}
-                      className="flex-1 bg-white border border-gray-300 px-2.5 py-1.5 h-[44px] text-xs text-gray-950 focus:outline-none focus:border-blue-800 rounded-lg font-semibold"
+                      className="flex-1 bg-white border border-zinc-200 px-3 h-[44px] text-xs text-zinc-950 focus:outline-none focus:ring-2 focus:ring-violet-600/15 focus:border-violet-600 rounded-lg font-bold"
                     />
                     <div className="relative shrink-0 w-28">
-                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">₹</span>
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400">₹</span>
                       <input
                         type="number"
                         placeholder="Price"
                         value={item.amount === 0 ? "" : item.amount}
                         onChange={(e) => handleTreatmentChange(index, "amount", e.target.value)}
-                        className="w-full bg-white border border-gray-300 pl-6 pr-2 h-[44px] text-xs font-mono font-bold text-blue-900 focus:outline-none focus:border-blue-800 rounded-lg text-right"
+                        className="w-full bg-white border border-zinc-200 pl-7 pr-3 h-[44px] text-xs font-mono font-bold text-violet-900 focus:outline-none focus:ring-2 focus:ring-violet-600/15 focus:border-violet-600 rounded-lg text-right"
                       />
                     </div>
                     <button
@@ -753,18 +757,18 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
           </div>
 
           {/* Payment details section */}
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3.5">
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Invoice Checkout</span>
+          <div className="bg-zinc-50 border border-zinc-250/60 rounded-xl p-4 space-y-3.5">
+            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block font-mono">Invoice Checkout</span>
             <div className="grid grid-cols-3 gap-2">
               {["Cash", "UPI", "Card"].map((mode) => (
                 <button
                   key={mode}
                   type="button"
                   onClick={() => setPaymentMethod(mode)}
-                  className={`py-2 px-3 text-xs font-bold rounded-md border flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  className={`py-2 px-3 h-[40px] text-xs font-extrabold rounded-lg border flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                     paymentMethod === mode
-                      ? "bg-blue-800 border-blue-900 text-white shadow-sm"
-                      : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                      ? "bg-violet-600 border-violet-800 text-white shadow-md shadow-violet-600/10"
+                      : "bg-white border-zinc-200 text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900"
                   }`}
                 >
                   {mode === "Cash" && <Banknote className="w-3.5 h-3.5" />}
@@ -775,80 +779,80 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
               ))}
             </div>
 
-            <div className="flex justify-between items-center pt-2.5 border-t border-gray-200 text-sm">
-              <span className="font-bold text-gray-500">Grand Total Invoice Value:</span>
-              <span className="font-black text-blue-900 text-base font-mono">₹{grandTotal}</span>
+            <div className="flex justify-between items-center pt-3 border-t border-zinc-200 text-xs">
+              <span className="font-bold text-zinc-500 uppercase tracking-wide">Grand Total Invoice:</span>
+              <span className="font-black text-violet-950 text-lg font-mono">₹{grandTotal}</span>
             </div>
           </div>
         </div>
 
         {/* ==================== RIGHT COLUMN: PRESCRIPTION WRITER ==================== */}
-        <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm space-y-5">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+        <div className="bg-white border border-zinc-200/80 rounded-2xl p-5 shadow-xl space-y-5">
+          <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
             <div className="flex items-center space-x-2">
-              <FileText className="w-4 h-4 text-emerald-700" />
-              <h3 className="font-bold text-gray-900 text-sm tracking-tight">Clinical E-Prescription (Rx)</h3>
+              <FileText className="w-4 h-4 text-violet-600" />
+              <h3 className="font-extrabold text-violet-950 text-sm tracking-tight">Clinical E-Prescription (Rx)</h3>
             </div>
-            <span className="text-[10px] bg-emerald-50 text-emerald-800 border border-emerald-100 font-bold px-2 py-0.5 uppercase tracking-wide rounded">
+            <span className="text-[10px] bg-violet-50 text-violet-700 border border-violet-100 font-extrabold px-2.5 py-0.5 uppercase tracking-wider rounded-lg">
               DR-RK-001
             </span>
           </div>
 
           {/* Clinical notes card */}
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Clinical Notes & Diagnostics</label>
+            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block font-mono">Clinical Notes & Diagnostics</label>
             <textarea
               value={doctorNotes}
               onChange={(e) => setDoctorNotes(e.target.value)}
               placeholder="Tooth #46 RCT diagnosis, instructions, review schedules..."
               rows={2}
-              className="w-full bg-white border border-gray-300 p-2.5 text-xs text-gray-950 focus:outline-none focus:ring-2 focus:ring-blue-800/10 focus:border-blue-800 rounded-md transition-all font-sans leading-normal"
+              className="w-full bg-zinc-50/50 border border-zinc-200 p-3 text-xs text-zinc-950 focus:outline-none focus:ring-4 focus:ring-violet-600/10 focus:border-violet-600 focus:bg-white rounded-xl transition-all font-sans leading-normal placeholder-zinc-400 font-medium"
             />
           </div>
 
           {/* Quick picks prescription */}
           <div className="space-y-2">
             <div className="flex justify-between items-center">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Prescription Fast-Add Picks</label>
+              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block font-mono">Prescription Fast-Add Picks</label>
               <button
                 type="button"
                 onClick={() => setShowAddMedForm(!showAddMedForm)}
-                className="text-[10px] font-bold text-blue-800 hover:underline cursor-pointer"
+                className="text-[10px] font-bold text-violet-700 hover:text-violet-900 cursor-pointer transition-colors"
               >
-                {showAddMedForm ? "Close Creator" : "Create New Custom Template"}
+                {showAddMedForm ? "Close Creator" : "Create Custom Template"}
               </button>
             </div>
 
             {showAddMedForm && (
-              <div className="bg-gray-50 p-3 border border-gray-200 rounded-md space-y-2 text-xs">
+              <div className="bg-zinc-50 p-4 border border-zinc-200 rounded-xl space-y-2.5 text-xs animate-in fade-in duration-150">
                 <input
                   type="text"
                   placeholder="Medicine Name (e.g. Paracetamol 650mg)"
                   value={newMedName}
                   onChange={(e) => setNewMedName(e.target.value)}
-                  className="w-full bg-white border border-gray-300 px-2 py-1.5 text-xs text-gray-950 rounded focus:outline-none focus:border-blue-800 font-semibold"
+                  className="w-full bg-white border border-zinc-200 px-3 py-2 text-xs text-zinc-950 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-600/15 focus:border-violet-600 font-bold"
                 />
-                <div className="grid grid-cols-3 gap-1.5">
+                <div className="grid grid-cols-3 gap-2">
                   <input
                     type="text"
                     placeholder="Dosage"
                     value={newMedDosage}
                     onChange={(e) => setNewMedDosage(e.target.value)}
-                    className="w-full bg-white border border-gray-300 px-2 py-1 text-[11px] text-gray-950 rounded focus:outline-none focus:border-blue-800"
+                    className="w-full bg-white border border-zinc-200 px-2.5 py-1.5 text-[11px] text-zinc-950 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-600/15 focus:border-violet-600"
                   />
                   <input
                     type="text"
                     placeholder="Freq (1-0-1)"
                     value={newMedFreq}
                     onChange={(e) => setNewMedFreq(e.target.value)}
-                    className="w-full bg-white border border-gray-300 px-2 py-1 text-[11px] text-gray-950 rounded focus:outline-none focus:border-blue-800"
+                    className="w-full bg-white border border-zinc-200 px-2.5 py-1.5 text-[11px] text-zinc-950 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-600/15 focus:border-violet-600"
                   />
                   <input
                     type="text"
                     placeholder="Duration"
                     value={newMedDuration}
                     onChange={(e) => setNewMedDuration(e.target.value)}
-                    className="w-full bg-white border border-gray-300 px-2 py-1 text-[11px] text-gray-950 rounded focus:outline-none focus:border-blue-800"
+                    className="w-full bg-white border border-zinc-200 px-2.5 py-1.5 text-[11px] text-zinc-950 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-600/15 focus:border-violet-600"
                   />
                 </div>
                 <input
@@ -856,20 +860,20 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
                   placeholder="Instructions (e.g. After Food)"
                   value={newMedInst}
                   onChange={(e) => setNewMedInst(e.target.value)}
-                  className="w-full bg-white border border-gray-300 px-2 py-1.5 text-xs text-gray-950 rounded focus:outline-none"
+                  className="w-full bg-white border border-zinc-200 px-3 py-2 text-xs text-zinc-950 rounded-lg focus:outline-none focus:ring-2 focus:ring-violet-600/15 focus:border-violet-600"
                 />
                 <div className="flex justify-end gap-1.5">
-                  <button type="button" onClick={() => setShowAddMedForm(false)} className="px-2 py-1 text-[10px] text-gray-500 font-semibold">Cancel</button>
-                  <button type="button" onClick={handleAddMedPick} className="bg-blue-800 text-white px-2.5 py-1 text-[10px] font-bold rounded">Add Pick</button>
+                  <button type="button" onClick={() => setShowAddMedForm(false)} className="px-3 py-1.5 text-xs text-zinc-500 font-semibold hover:text-zinc-800">Cancel</button>
+                  <button type="button" onClick={handleAddMedPick} className="bg-violet-600 text-white px-3.5 py-1.5 text-xs font-bold rounded-lg shadow-sm">Add Pick</button>
                 </div>
               </div>
             )}
 
-            <div className="flex flex-wrap gap-1 max-h-[110px] overflow-y-auto border border-gray-100 p-2 rounded-md">
+            <div className="flex flex-wrap gap-1.5 max-h-[110px] overflow-y-auto border border-zinc-150 p-2.5 rounded-xl bg-zinc-50/50">
               {prescriptionPicks.map((med, idx) => (
                 <div
                   key={idx}
-                  className="bg-gray-50 border border-gray-200 text-gray-700 text-[10px] px-2 py-1 rounded hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-900 transition-all font-semibold flex items-center space-x-1 cursor-pointer shrink-0"
+                  className="bg-white border border-zinc-200 text-zinc-700 text-[10px] px-2.5 py-1.5 rounded-lg hover:bg-violet-50 hover:border-violet-300 hover:text-violet-900 transition-all font-semibold flex items-center space-x-1 cursor-pointer shrink-0 shadow-xs"
                 >
                   <button type="button" onClick={() => handleQuickAddMedicine(med)} className="text-left font-bold active:scale-95">
                     {med.name}
@@ -884,17 +888,17 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
 
           {/* Medicines editor lines */}
           <div className="space-y-3">
-            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Prescribed Medicines List</label>
-            <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+            <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block font-mono">Prescribed Medicines List</label>
+            <div className="space-y-2.5 max-h-[250px] overflow-y-auto pr-1">
               {medicines.map((med, index) => (
-                <div key={index} className="bg-gray-50 p-3 rounded-lg border border-gray-200 space-y-2 relative">
-                  <div className="flex items-center gap-2">
+                <div key={index} className="bg-zinc-50 p-3 rounded-xl border border-zinc-200 space-y-2.5 relative animate-in fade-in duration-100">
+                  <div className="flex items-center gap-2.5">
                     <input
                       type="text"
                       placeholder="Medicine / Drug Name"
                       value={med.name}
                       onChange={(e) => handleMedicineChange(index, "name", e.target.value)}
-                      className="flex-1 bg-white border border-gray-300 px-2 py-1.5 text-xs text-gray-950 focus:outline-none focus:border-blue-800 rounded font-semibold"
+                      className="flex-1 bg-white border border-zinc-200 px-3 h-[44px] text-xs text-zinc-950 focus:outline-none focus:ring-2 focus:ring-violet-600/15 focus:border-violet-600 rounded-lg font-bold"
                     />
                     <button
                       type="button"
@@ -906,14 +910,14 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
                     </button>
                   </div>
                   
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                     <div>
                       <input
                         type="text"
                         placeholder="Dosage"
                         value={med.dosage}
                         onChange={(e) => handleMedicineChange(index, "dosage", e.target.value)}
-                        className="w-full bg-white border border-gray-300 px-2 py-1 text-[11px] text-gray-950 rounded"
+                        className="w-full bg-white border border-zinc-200 px-2.5 py-1.5 text-[11px] text-zinc-950 rounded-md font-medium"
                       />
                     </div>
                     <div>
@@ -922,7 +926,7 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
                         placeholder="Freq (1-0-1)"
                         value={med.frequency}
                         onChange={(e) => handleMedicineChange(index, "frequency", e.target.value)}
-                        className="w-full bg-white border border-gray-300 px-2 py-1 text-[11px] text-gray-950 rounded"
+                        className="w-full bg-white border border-zinc-200 px-2.5 py-1.5 text-[11px] text-zinc-950 rounded-md font-medium"
                       />
                     </div>
                     <div>
@@ -931,7 +935,7 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
                         placeholder="Duration"
                         value={med.duration}
                         onChange={(e) => handleMedicineChange(index, "duration", e.target.value)}
-                        className="w-full bg-white border border-gray-300 px-2 py-1 text-[11px] text-gray-950 rounded"
+                        className="w-full bg-white border border-zinc-200 px-2.5 py-1.5 text-[11px] text-zinc-950 rounded-md font-medium"
                       />
                     </div>
                     <div>
@@ -940,7 +944,7 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
                         placeholder="Instructions"
                         value={med.instructions}
                         onChange={(e) => handleMedicineChange(index, "instructions", e.target.value)}
-                        className="w-full bg-white border border-gray-300 px-2 py-1 text-[11px] text-gray-950 rounded"
+                        className="w-full bg-white border border-zinc-200 px-2.5 py-1.5 text-[11px] text-zinc-950 rounded-md font-medium"
                       />
                     </div>
                   </div>
@@ -951,10 +955,10 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
             <button
               type="button"
               onClick={handleAddMedicineRow}
-              className="w-full border border-dashed border-gray-300 hover:border-emerald-700 hover:bg-emerald-50/20 py-2 text-xs font-bold text-emerald-700 hover:text-emerald-850 rounded-md transition-all flex items-center justify-center gap-1 cursor-pointer"
+              className="w-full border border-dashed border-violet-300 hover:border-violet-600 hover:bg-violet-50/20 py-2.5 text-xs font-bold text-violet-700 hover:text-violet-900 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer h-[44px]"
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Medicine Prescription Row</span>
+              <Plus className="w-4 h-4" />
+              <span>Add Medicine Row</span>
             </button>
           </div>
         </div>
@@ -963,55 +967,57 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
 
       {/* 3. POST-SAVE MULTI-ACTION MODAL / OVERLAY DIALOG */}
       {showExportModal && (
-        <div className="fixed inset-0 bg-blue-950/40 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white border border-gray-200 rounded-xl max-w-lg w-full shadow-2xl p-6 relative flex flex-col gap-5 text-gray-900 animate-in fade-in zoom-in-95 duration-150">
-            
+        <div className="fixed inset-0 bg-zinc-950/60 backdrop-blur-md flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white border border-violet-100 rounded-3xl max-w-lg w-full shadow-2xl p-6 md:p-7 relative flex flex-col gap-5 text-zinc-900 animate-in fade-in zoom-in-95 duration-150">
+            {/* Elegant premium top gradient line */}
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-400 via-violet-600 to-amber-400"></div>
+
             <div className="flex justify-between items-start">
               <div className="flex items-center gap-3">
-                <div className="bg-emerald-100 text-emerald-800 p-2 rounded-full flex items-center justify-center">
-                  <CheckCircle className="w-6 h-6 text-emerald-600 animate-bounce" />
+                <div className="bg-emerald-50 text-emerald-800 p-2.5 rounded-2xl border border-emerald-100 flex items-center justify-center">
+                  <CheckCircle className="w-6 h-6 text-emerald-600" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-gray-950 tracking-tight">Clinical Session Saved!</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">Records saved securely to cloud database link.</p>
+                  <h3 className="text-lg font-extrabold text-violet-950 tracking-tight">Clinical Session Saved!</h3>
+                  <p className="text-xs text-zinc-500 mt-0.5">Records saved securely to Cloud database.</p>
                 </div>
               </div>
               <button 
                 type="button" 
                 onClick={() => setShowExportModal(false)}
-                className="p-1 rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 cursor-pointer"
+                className="p-1.5 rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Session Summary Card */}
-            <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-lg text-xs space-y-2 leading-relaxed">
-              <div className="font-bold text-blue-900">Patient: {patientName}</div>
-              <div className="font-mono text-gray-500">Phone: {patientMobile || "Not provided"}</div>
-              <div className="border-t border-blue-100/60 my-2 pt-2 grid grid-cols-2 gap-2">
+            <div className="bg-gradient-to-br from-violet-50/50 to-amber-50/30 border border-violet-100/50 p-4 rounded-2xl text-xs space-y-2.5 leading-relaxed">
+              <div className="font-extrabold text-violet-950 text-sm">Patient: {patientName}</div>
+              <div className="font-mono text-zinc-500 font-bold">Phone: {patientMobile || "Not provided"}</div>
+              <div className="border-t border-violet-100/60 my-2 pt-2.5 grid grid-cols-2 gap-3">
                 <div>
-                  <span className="font-bold block text-gray-400 text-[10px] uppercase">Billing Status</span>
-                  <span className="font-semibold block text-gray-800">
-                    {savedBillRecord ? `Receipt Generated (Total: ₹${savedBillRecord.grand_total})` : "No billing registered"}
+                  <span className="font-bold block text-zinc-400 text-[10px] uppercase tracking-wide">Billing Status</span>
+                  <span className="font-semibold block text-zinc-800 mt-0.5">
+                    {savedBillRecord ? `Receipt Generated (₹${savedBillRecord.grand_total})` : "No billing registered"}
                   </span>
                 </div>
                 <div>
-                  <span className="font-bold block text-gray-400 text-[10px] uppercase">Prescription Rx</span>
-                  <span className="font-semibold block text-gray-800">
+                  <span className="font-bold block text-zinc-400 text-[10px] uppercase tracking-wide">Prescription Rx</span>
+                  <span className="font-semibold block text-zinc-800 mt-0.5">
                     {savedPresRecord ? `Rx chart recorded (${savedPresRecord.medicines.length} drug lines)` : "No medicines prescribed"}
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* Quick Export Actions Dashboard (Optimized for iPad click/touches) */}
+            {/* Quick Export Actions Dashboard */}
             <div className="space-y-3">
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Instant Export Actions</span>
+              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block font-mono">Instant Export Actions</span>
 
               {/* Alert notifications for sharing feedback */}
               {shareMessage && (
-                <div className={`p-3 text-xs font-semibold rounded-lg shadow-xs border ${
+                <div className={`p-3 text-xs font-semibold rounded-xl shadow-xs border ${
                   shareMessage.type === "success"
                     ? "bg-emerald-50 border-emerald-200 text-emerald-800 animate-pulse"
                     : "bg-amber-50 border-amber-200 text-amber-800 animate-pulse"
@@ -1022,38 +1028,38 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
 
               <div className="space-y-4">
                 {savedBillRecord && (
-                  <div className="space-y-2 border-b border-gray-100 pb-4">
-                    <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider block">Billing & Invoice</span>
+                  <div className="space-y-2 border-b border-zinc-100 pb-4">
+                    <span className="text-[10px] font-bold text-violet-800 uppercase tracking-wider block font-mono">Billing & Invoice</span>
                     <button
                       type="button"
                       onClick={() => handleSendBillPDF(savedBillRecord)}
-                      className="w-full flex items-center justify-center gap-2 bg-emerald-600 text-white border border-emerald-700 font-extrabold text-xs py-3 px-4 rounded-lg hover:bg-emerald-700 transition-all cursor-pointer active:scale-[0.98] shadow-md hover:shadow-lg"
+                      className="w-full flex items-center justify-center gap-2 bg-emerald-600 text-white border border-emerald-700 font-extrabold text-xs py-3 px-4 rounded-xl hover:bg-emerald-700 transition-all cursor-pointer active:scale-[0.98] shadow-md hover:shadow-lg"
                     >
                       <Share2 className="w-4 h-4" />
-                      <span>Send Bill (PDF)</span>
+                      <span>Send Bill via WhatsApp (PDF)</span>
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => setShowReceiptPrint(true)}
-                      className="w-full flex items-center justify-center gap-2 bg-blue-50 text-blue-900 border border-blue-200 font-bold text-xs py-2.5 px-4 rounded-lg hover:bg-blue-100 transition-all cursor-pointer active:scale-[0.98]"
+                      onClick={() => triggerThermalBillPrint(savedBillRecord, settings)}
+                      className="w-full flex items-center justify-center gap-2 bg-violet-50 text-violet-900 border border-violet-100 font-extrabold text-xs py-2.5 px-4 rounded-xl hover:bg-violet-100 transition-all cursor-pointer active:scale-[0.98]"
                     >
-                      <Printer className="w-4 h-4 text-blue-700" />
-                      <span>Print Bill Receipt</span>
+                      <Printer className="w-4 h-4 text-violet-700" />
+                      <span>View & Print Thermal Bill Receipt</span>
                     </button>
                   </div>
                 )}
 
                 {savedPresRecord && (
                   <div className="space-y-2 pt-2">
-                    <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">Prescription (Rx)</span>
+                    <span className="text-[10px] font-bold text-violet-800 uppercase tracking-wider block font-mono">Prescription (Rx)</span>
                     <button
                       type="button"
                       onClick={() => handleSendRxText(savedPresRecord)}
-                      className="w-full flex items-center justify-center gap-2 bg-emerald-600 text-white border border-emerald-700 font-extrabold text-xs py-3 px-4 rounded-lg hover:bg-emerald-700 transition-all cursor-pointer active:scale-[0.98] shadow-md hover:shadow-lg"
+                      className="w-full flex items-center justify-center gap-2 bg-emerald-600 text-white border border-emerald-700 font-extrabold text-xs py-3 px-4 rounded-xl hover:bg-emerald-700 transition-all cursor-pointer active:scale-[0.98] shadow-md hover:shadow-lg"
                     >
                       <Share2 className="w-4 h-4" />
-                      <span>Send Rx (Text)</span>
+                      <span>Send Rx via WhatsApp (Text)</span>
                     </button>
 
                     <button
@@ -1068,19 +1074,19 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
                           setTimeout(() => setShareMessage(null), 5000);
                         }
                       }}
-                      className="w-full flex items-center justify-center gap-2 bg-blue-50 text-blue-900 border border-blue-200 font-bold text-xs py-2.5 px-4 rounded-lg hover:bg-blue-100 transition-all cursor-pointer active:scale-[0.98]"
+                      className="w-full flex items-center justify-center gap-2 bg-violet-50 text-violet-900 border border-violet-100 font-extrabold text-xs py-2.5 px-4 rounded-xl hover:bg-violet-100 transition-all cursor-pointer active:scale-[0.98]"
                     >
-                      <Printer className="w-4 h-4 text-blue-700" />
+                      <Printer className="w-4 h-4 text-violet-700" />
                       <span>Print Prescription (Thermal)</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => handleDownloadPrescriptionPDF(savedPresRecord)}
-                      className="w-full flex items-center justify-center gap-2 bg-white text-gray-700 border border-gray-300 font-bold text-xs py-2.5 px-4 rounded-lg hover:bg-gray-50 transition-all cursor-pointer active:scale-[0.98]"
+                      className="w-full flex items-center justify-center gap-2 bg-white text-zinc-700 border border-zinc-200 font-bold text-xs py-2.5 px-4 rounded-xl hover:bg-zinc-50 transition-all cursor-pointer active:scale-[0.98]"
                     >
-                      <FileText className="w-4 h-4 text-gray-500" />
-                      <span>Download Thermal PDF</span>
+                      <FileText className="w-4 h-4 text-zinc-500" />
+                      <span>Download Prescription PDF (A4)</span>
                     </button>
                   </div>
                 )}
@@ -1088,11 +1094,11 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
             </div>
 
             {/* Bottom Primary Drawer Options */}
-            <div className="flex flex-col sm:flex-row gap-2 pt-4 border-t border-gray-100">
+            <div className="flex flex-col sm:flex-row gap-2 pt-4 border-t border-zinc-100">
               <button
                 type="button"
                 onClick={handleResetWorkspace}
-                className="flex-1 bg-gray-900 hover:bg-black text-white py-2.5 px-4 rounded-lg text-xs font-bold transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer"
+                className="flex-1 bg-violet-600 hover:bg-violet-750 text-white py-3 px-4 rounded-xl text-xs font-extrabold transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-violet-600/10"
               >
                 <Plus className="w-4 h-4" />
                 <span>Next Patient / Start New Session</span>
@@ -1101,7 +1107,7 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
               <button
                 type="button"
                 onClick={() => setShowExportModal(false)}
-                className="bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 py-2.5 px-4 rounded-lg text-xs font-bold cursor-pointer transition-all text-center"
+                className="bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 text-zinc-700 py-3 px-4 rounded-xl text-xs font-bold cursor-pointer transition-all text-center"
               >
                 Keep Current Details
               </button>
@@ -1109,15 +1115,6 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
 
           </div>
         </div>
-      )}
-
-      {/* Reprint Thermal Receipt 80mm Popup */}
-      {showReceiptPrint && savedBillRecord && (
-        <ReceiptPrint
-          bill={savedBillRecord}
-          settings={settings}
-          onClose={() => setShowReceiptPrint(false)}
-        />
       )}
 
     </div>

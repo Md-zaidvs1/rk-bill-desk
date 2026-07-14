@@ -6,9 +6,8 @@ import {
 } from "lucide-react";
 import { Bill, Prescription, ClinicSettings } from "../types";
 import { supabase } from "../supabaseClient";
-import ReceiptPrint from "../ReceiptPrint";
 import jsPDF from "jspdf";
-import { printBridge, generateThermalPDF } from "../services/printBridge";
+import { printBridge, generateThermalPDF, generateThermalReceiptPDF, generateA4InvoicePDF, triggerThermalBillPrint, generateA4PrescriptionPDF } from "../services/printBridge";
 
 interface DashboardProps {
   settings: ClinicSettings;
@@ -23,13 +22,11 @@ export default function Dashboard({ settings, onNavigate }: DashboardProps) {
   // Patient History States
   const [historySearch, setHistorySearch] = useState("");
   const [selectedPatientName, setSelectedPatientName] = useState<string | null>(null);
-  const [billForReceiptPrint, setBillForReceiptPrint] = useState<Bill | null>(null);
   const [shareMessage, setShareMessage] = useState<{ type: string; text: string } | null>(null);
 
   const handleDownloadPrescriptionPDF = (pres: Prescription) => {
     try {
-      const receiptData = printBridge.getPrescriptionReceiptData(pres, settings);
-      const doc = generateThermalPDF(receiptData);
+      const doc = generateA4PrescriptionPDF(pres, settings);
       doc.save(`Prescription_${pres.patient_name.replace(/\s+/g, "_")}_${pres.date}.pdf`);
     } catch (err) {
       console.error("PDF generation failed:", err);
@@ -39,7 +36,7 @@ export default function Dashboard({ settings, onNavigate }: DashboardProps) {
   const handleDownloadInvoicePDF = (bill: Bill) => {
     try {
       const receiptData = printBridge.getBillReceiptData(bill, settings);
-      const doc = generateThermalPDF(receiptData);
+      const doc = generateA4InvoicePDF(receiptData);
       doc.save(`Invoice_${bill.patient_name.replace(/\s+/g, "_")}_${bill.bill_number}.pdf`);
     } catch (err) {
       console.error("Invoice PDF generation failed:", err);
@@ -70,7 +67,7 @@ export default function Dashboard({ settings, onNavigate }: DashboardProps) {
       if (bill) {
         // 1. Generate Invoice PDF
         const receiptData = printBridge.getBillReceiptData(bill, settings);
-        const docBill = generateThermalPDF(receiptData);
+        const docBill = generateA4InvoicePDF(receiptData);
         docBill.save(`Invoice_${bill.patient_name.replace(/\s+/g, "_")}_${bill.bill_number}.pdf`);
 
         const items = bill.items || bill.bill_items || [];
@@ -419,6 +416,11 @@ export default function Dashboard({ settings, onNavigate }: DashboardProps) {
     window.open(url, "_blank");
   };
 
+  const handleBillPrinted = (billId: number) => {
+    // Optimistically update printed state in local state array for instant reactivity
+    setBills(prev => prev.map(b => b.id === billId ? { ...b, printed: true } : b));
+  };
+
   return (
     <div className="space-y-6">
       {/* Welcome Banner */}
@@ -443,6 +445,8 @@ export default function Dashboard({ settings, onNavigate }: DashboardProps) {
           </div>
         </div>
       </div>
+
+
 
       {/* Overview Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -929,7 +933,7 @@ export default function Dashboard({ settings, onNavigate }: DashboardProps) {
 
                           <button
                             type="button"
-                            onClick={() => setBillForReceiptPrint(b)}
+                            onClick={() => triggerThermalBillPrint(b, settings)}
                             className="w-full flex items-center justify-center gap-2 bg-blue-50 text-blue-900 border border-blue-200 font-bold text-xs py-2.5 px-4 rounded-lg hover:bg-blue-100 transition-all cursor-pointer active:scale-[0.98] h-[44px] flex-1"
                           >
                             <Printer className="w-3.5 h-3.5 text-blue-700" />
@@ -1023,15 +1027,6 @@ export default function Dashboard({ settings, onNavigate }: DashboardProps) {
 
           </div>
         </div>
-      )}
-
-      {/* 5. INDIVIDUAL THERMAL BILL RECEIPT PRINT OVERLAY */}
-      {billForReceiptPrint && (
-        <ReceiptPrint
-          bill={billForReceiptPrint}
-          settings={settings}
-          onClose={() => setBillForReceiptPrint(null)}
-        />
       )}
 
     </div>
