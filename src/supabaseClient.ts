@@ -70,6 +70,8 @@ class FallbackQueryBuilder {
   private isDelete: boolean = false;
   private insertRows: any[] | null = null;
   private limitCount: number | null = null;
+  private isUpsert: boolean = false;
+  private upsertValues: any = null;
 
   constructor(tableName: string) {
     this.tableName = tableName;
@@ -243,6 +245,21 @@ class FallbackQueryBuilder {
       return { data: resData, error: null };
     }
 
+    if (this.isUpsert && this.upsertValues) {
+      const values = Array.isArray(this.upsertValues) ? this.upsertValues : [this.upsertValues];
+      for (const val of values) {
+        const idx = this.data.findIndex(item => item.id === val.id);
+        if (idx > -1) {
+          this.data[idx] = { ...this.data[idx], ...val };
+        } else {
+          this.data.push(val);
+        }
+      }
+      localStorage.setItem(`rk_fallback_${this.tableName}`, JSON.stringify(this.data));
+      const resData = this.isSingle ? (values[0] || null) : values;
+      return { data: resData, error: null };
+    }
+
     const filtered = this.getFilteredData();
     const resData = this.isSingle ? (filtered[0] || null) : filtered;
     return { data: resData, error: null };
@@ -265,6 +282,12 @@ class FallbackQueryBuilder {
 
   delete() {
     this.isDelete = true;
+    return this;
+  }
+
+  upsert(values: any) {
+    this.isUpsert = true;
+    this.upsertValues = values;
     return this;
   }
 }
@@ -347,6 +370,12 @@ class RobustQueryBuilder {
     return this;
   }
 
+  upsert(values: any) {
+    if (this.realQB) this.realQB = this.realQB.upsert(values);
+    this.fallbackQB.upsert(values);
+    return this;
+  }
+
   async execute() {
     if (this.realQB) {
       try {
@@ -356,6 +385,16 @@ class RobustQueryBuilder {
           console.warn(`[Supabase Proxy] Query error on '${this.tableName}'. Falling back to offline client. Error:`, errMsg);
           return await this.fallbackQB.execute();
         }
+        
+        // If it's a write operation, keep local storage in sync
+        if (this.tableName === "settings" || this.tableName === "users" || this.tableName === "bills" || this.tableName === "bill_items" || this.tableName === "prescriptions") {
+          try {
+            await this.fallbackQB.execute();
+          } catch (e) {
+            console.warn("[Supabase Proxy] Silent local storage sync failed:", e);
+          }
+        }
+        
         return result;
       } catch (err: any) {
         console.warn(`[Supabase Proxy] Connection/Execution crash on '${this.tableName}'. Falling back to offline client. Error:`, err);
@@ -392,6 +431,26 @@ export const seedDefaultUsers = async () => {
     }
   } catch (err: any) {
     console.warn("[Supabase Seeder] Auto-seed error:", err.message || err);
+  }
+};
+
+export const seedDefaultSettings = async () => {
+  if (!isSupabaseConfigured) return;
+  try {
+    const { data: existingSettings, error } = await supabase.from("settings").select("id").eq("id", "config");
+    if (error) {
+      console.warn("[Supabase Seeder] Could not read existing settings:", error.message);
+      return;
+    }
+    if (!existingSettings || existingSettings.length === 0) {
+      console.log("[Supabase Seeder] Inserting default settings config row...");
+      const { error: insertErr } = await supabase.from("settings").insert([DEFAULT_SETTINGS]);
+      if (insertErr) {
+        console.warn("[Supabase Seeder] Settings insert failed:", insertErr.message);
+      }
+    }
+  } catch (err: any) {
+    console.warn("[Supabase Seeder] Auto-seed settings error:", err.message || err);
   }
 };
 
