@@ -406,7 +406,34 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
       // 1. Generate Invoice PDF
       const receiptData = printBridge.getBillReceiptData(bill, settings);
       const docBill = generateA4InvoicePDF(receiptData);
-      docBill.save(`Invoice_${bill.patient_name.replace(/\s+/g, "_")}_${bill.bill_number}.pdf`);
+      const fileName = `Invoice_${bill.patient_name.replace(/\s+/g, "_")}_${bill.bill_number}.pdf`;
+      const pdfBlob = docBill.output("blob");
+      const file = new File([pdfBlob], fileName, { type: "application/pdf" });
+
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: `Invoice #${bill.bill_number}`,
+            text: `Tax Invoice for ${bill.patient_name}`,
+          });
+          setShareMessage({ 
+            type: "success", 
+            text: "Invoice PDF shared successfully via native share dialog!" 
+          });
+          setTimeout(() => setShareMessage(null), 5000);
+          return; // Success! Do not download or open WhatsApp.
+        } catch (shareErr: any) {
+          console.warn("Native share canceled or failed:", shareErr);
+          if (shareErr.name === "AbortError") {
+            // User canceled, respect their choice
+            return;
+          }
+        }
+      }
+
+      // Fallback
+      docBill.save(fileName);
 
       // 2. Format a clean text summary block containing only the billing/invoice details
       const items = bill.items || bill.bill_items || [];

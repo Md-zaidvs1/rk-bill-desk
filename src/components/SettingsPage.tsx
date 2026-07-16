@@ -187,27 +187,46 @@ export default function SettingsPage({ settings, user, onSettingsUpdate, onUserU
     setSettingsSuccess(null);
 
     try {
-      const updatedValues = {
+      const targetId = settings.id || "config";
+
+      const fullValues = {
+        id: targetId,
         clinic_name: clinicName.trim(),
         address: address.trim(),
         phone: phone.trim(),
         receipt_footer: receiptFooter.trim(),
-        whatsapp_message_template: whatsappTemplate.trim()
+        whatsapp_message_template: whatsappTemplate.trim(),
+        bill_header_logo_type: billLogoType,
+        clinic_logo_base64: clinicLogoBase64,
+        bill_footer_message: billFooterMessage.trim()
       };
 
-      const targetId = settings.id || "config";
-
-      const { data, error: err } = await supabase
+      let saveResult = await supabase
         .from("settings")
-        .update(updatedValues)
-        .eq("id", targetId)
+        .upsert(fullValues)
         .select();
 
-      if (err) {
-        throw new Error(err.message);
+      if (saveResult.error) {
+        console.warn("[Settings] Full upsert failed, attempting core-only upsert. Error:", saveResult.error.message);
+        const coreValues = {
+          id: targetId,
+          clinic_name: clinicName.trim(),
+          address: address.trim(),
+          phone: phone.trim(),
+          receipt_footer: receiptFooter.trim(),
+          whatsapp_message_template: whatsappTemplate.trim()
+        };
+        saveResult = await supabase
+          .from("settings")
+          .upsert(coreValues)
+          .select();
+
+        if (saveResult.error) {
+          throw new Error(saveResult.error.message);
+        }
       }
 
-      // Save custom extra settings to localStorage
+      // Save custom extra settings to localStorage as a robust dual-save
       const extraSettings = {
         bill_header_logo_type: billLogoType,
         clinic_logo_base64: clinicLogoBase64,
@@ -217,7 +236,7 @@ export default function SettingsPage({ settings, user, onSettingsUpdate, onUserU
 
       setSettingsSuccess("Clinic profile settings and PDF customizations saved successfully!");
       // If direct single row was returned, pass it, otherwise fallback to values
-      const dbRecord = (data && data.length > 0) ? data[0] : { id: targetId, ...updatedValues };
+      const dbRecord = (saveResult.data && saveResult.data.length > 0) ? saveResult.data[0] : { id: targetId, ...fullValues };
       const updatedRecord = { ...dbRecord, ...extraSettings };
       onSettingsUpdate(updatedRecord);
     } catch (err: any) {

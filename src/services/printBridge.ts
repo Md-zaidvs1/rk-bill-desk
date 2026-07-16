@@ -455,6 +455,7 @@ export class PrintBridgeService {
       grandTotal: 0,
       paymentMethod: prescription.doctor_notes || "N/A",
       footer: settings.receipt_footer || "Thank You",
+      footerMessage: settings.bill_footer_message || `Thank you for choosing ${settings.clinic_name}.`,
     };
   }
 
@@ -506,12 +507,14 @@ export function generateThermalReceiptPDF(receiptData: ReceiptData): jsPDF {
   const contentWidth = 70; // 80 - 10
 
   const runLayout = (dryRun: boolean, doc: jsPDF) => {
-    let y = 7;
-    doc.setFont("courier", "normal");
+    let y = 12;
+    
+    // Use Helvetica throughout for clean modern look, matching reference image
+    doc.setFont("helvetica", "normal");
 
-    // 1. Clinic Details
-    doc.setFont("courier", "bold");
-    doc.setFontSize(11);
+    // 1. Clinic Name (Very large, bold, centered)
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(22.0); // Extremely bold, prominent to match reference image exactly
     doc.setTextColor(0, 0, 0);
     const clinicLines = doc.splitTextToSize(receiptData.clinic.toUpperCase(), contentWidth);
     clinicLines.forEach((line: string) => {
@@ -519,297 +522,476 @@ export function generateThermalReceiptPDF(receiptData: ReceiptData): jsPDF {
         const textWidth = doc.getTextWidth(line);
         doc.text(line, (80 - textWidth) / 2, y);
       }
-      y += 4.5;
+      y += 6.5;
     });
+    y += 1.0;
 
-    doc.setFont("courier", "normal");
-    doc.setFontSize(8);
+    // Elegant divider with middle diamond (Centered perfectly)
+    if (!dryRun) {
+      doc.saveGraphicsState();
+      doc.setLineWidth(0.35);
+      doc.setDrawColor(0, 0, 0);
+      doc.line(leftMargin, y, 37.5, y);
+      doc.line(42.5, y, 80 - leftMargin, y);
+      doc.setFillColor(0, 0, 0);
+      doc.triangle(40, y - 1.0, 38.8, y, 40, y + 1.0, "F");
+      doc.triangle(40, y - 1.0, 41.2, y, 40, y + 1.0, "F");
+      doc.restoreGraphicsState();
+    }
+    y += 5.5;
+
+    // 2. Address (Centered perfectly, no icon to match reference image exactly)
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.0);
     doc.setTextColor(0, 0, 0);
     if (receiptData.address) {
       const addrLines = doc.splitTextToSize(receiptData.address, contentWidth);
       addrLines.forEach((line: string) => {
         if (!dryRun) {
           const textWidth = doc.getTextWidth(line);
-          doc.text(line, (80 - textWidth) / 2, y);
+          const startX = (80 - textWidth) / 2;
+          doc.text(line, startX, y);
         }
-        y += 3.8;
+        y += 4.5;
       });
     }
+
+    y += 1.5;
+
+    // 3. Phone/Mobile Number (Centered perfectly, bold with a slanted receiver icon)
+    const drawSlantedPhone = (px: number, py: number) => {
+      doc.saveGraphicsState();
+      doc.setLineWidth(0.8);
+      doc.setLineCap("round");
+      doc.setDrawColor(0, 0, 0);
+      // Curved hook from top-right to bottom-left:
+      doc.line(px + 1.1, py - 0.9, px + 0.7, py - 0.5);
+      doc.line(px + 0.7, py - 0.5, px - 0.1, py + 0.3);
+      doc.line(px - 0.1, py + 0.3, px - 0.9, py + 1.1);
+      // End bulbs
+      doc.setFillColor(0, 0, 0);
+      doc.circle(px + 1.3, py - 0.9, 0.65, "F");
+      doc.circle(px - 0.9, py + 1.3, 0.65, "F");
+      doc.restoreGraphicsState();
+    };
 
     if (receiptData.phone) {
       const cleanedPhone = receiptData.phone.replace("+91", "").trim();
       const phoneStr = `+91 ${cleanedPhone}`;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11.0);
       if (!dryRun) {
         const textWidth = doc.getTextWidth(phoneStr);
-        doc.text(phoneStr, (80 - textWidth) / 2, y);
+        const startX = (80 - textWidth) / 2;
+        doc.text(phoneStr, startX, y);
+        drawSlantedPhone(startX - 2.8, y - 0.8);
       }
-      y += 4.5;
+      y += 5.5;
     }
 
+    // 4. Solid horizontal line before TAX INVOICE / RECEIPT
     y += 1.5;
     if (!dryRun) {
+      doc.saveGraphicsState();
       doc.setDrawColor(0, 0, 0);
-      doc.setLineWidth(0.4);
+      doc.setLineWidth(0.35);
       doc.line(leftMargin, y, 80 - leftMargin, y);
-    }
-    y += 5.5;
-
-    // 2. Bill Header ("Tax Invoice / Receipt")
-    doc.setFont("courier", "bold");
-    doc.setFontSize(10);
-    const headerTitle = "Tax Invoice / Receipt";
-    if (!dryRun) {
-      const titleWidth = doc.getTextWidth(headerTitle);
-      doc.text(headerTitle, (80 - titleWidth) / 2, y);
-    }
-    y += 6;
-
-    // 3. Invoice No & Date
-    doc.setFont("courier", "normal");
-    doc.setFontSize(8);
-    
-    // Format invoice line
-    if (!dryRun) {
-      doc.text("Invoice", leftMargin, y);
-      doc.text(receiptData.billNo, 80 - leftMargin, y, { align: "right" });
-    }
-    y += 4;
-
-    // Format date line
-    if (!dryRun) {
-      doc.text("Date", leftMargin, y);
-      doc.text(receiptData.date, 80 - leftMargin, y, { align: "right" });
+      doc.restoreGraphicsState();
     }
     y += 4.5;
 
-    // Dashed divider
-    y += 1;
+    // 5. TAX INVOICE / RECEIPT inside rounded rectangle (Pill)
+    const headerTitle = "TAX INVOICE / RECEIPT";
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    const titleWidth = doc.getTextWidth(headerTitle);
+    const boxW = titleWidth + 6.0;
+    const boxH = 5.6;
+    const boxX = 40 - boxW / 2;
+    const boxY = y - 4.2;
+
     if (!dryRun) {
+      doc.saveGraphicsState();
+      doc.setFillColor(0, 0, 0);
+      doc.roundedRect(boxX, boxY, boxW, boxH, 1.5, 1.5, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.text(headerTitle, 40, y - 0.2, { align: "center" });
+      doc.restoreGraphicsState();
+    }
+    y += 3.5;
+
+    // Solid horizontal line after TAX INVOICE / RECEIPT
+    if (!dryRun) {
+      doc.saveGraphicsState();
       doc.setDrawColor(0, 0, 0);
-      doc.setLineWidth(0.2);
-      doc.setLineDashPattern([1.2, 1.2], 0);
+      doc.setLineWidth(0.35);
       doc.line(leftMargin, y, 80 - leftMargin, y);
-      doc.setLineDashPattern([], 0); // reset
+      doc.restoreGraphicsState();
     }
-    y += 4.5;
+    y += 6.5; // Perfect vertical spacing before invoice section
 
-    // 4. Patient Bill To
+    // 6. Invoice No. & Date & Time layout (Side-by-side, perfectly matching the reference image)
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.0);
+    doc.setTextColor(0, 0, 0);
     if (!dryRun) {
-      doc.setFont("courier", "normal");
-      doc.setFontSize(7.5);
-      doc.text("BILL TO", leftMargin, y);
+      doc.text("Invoice No.", leftMargin, y);
+      doc.text("Date & Time", 80 - leftMargin, y, { align: "right" });
     }
-    y += 4;
+    y += 4.8;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11.5);
+    doc.setTextColor(0, 0, 0);
+
+    const dateParts = receiptData.date.split(" ");
+    const dateVal = dateParts[0] || receiptData.date;
+    const timeVal = dateParts[1] || "";
+    let displayTime = "";
+    if (timeVal) {
+      displayTime = dateParts.slice(1).join(" ");
+    }
 
     if (!dryRun) {
-      doc.setFont("courier", "bold");
-      doc.setFontSize(9);
-      doc.text(receiptData.patient.toUpperCase(), leftMargin, y);
+      doc.text(receiptData.billNo, leftMargin, y);
+      doc.text(dateVal, 80 - leftMargin, y, { align: "right" });
     }
-    y += 4;
+    y += 4.8;
+
+    if (displayTime) {
+      if (!dryRun) {
+        doc.text(displayTime, 80 - leftMargin, y, { align: "right" });
+      }
+      y += 4.8;
+    }
+
+    // Dashed divider before Patient section
+    y += 1.0;
+    if (!dryRun) {
+      doc.saveGraphicsState();
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.3);
+      doc.setLineDashPattern([1.5, 1.5], 0);
+      doc.line(leftMargin, y, 80 - leftMargin, y);
+      doc.setLineDashPattern([], 0);
+      doc.restoreGraphicsState();
+    }
+    y += 6.0;
+
+    // 7. Patient Info with user avatar icon next to "BILL TO"
+    const drawUserIcon = (ux: number, uy: number) => {
+      doc.saveGraphicsState();
+      doc.setFillColor(0, 0, 0);
+      doc.circle(ux, uy - 1.5, 0.9, "F");
+      doc.ellipse(ux, uy + 0.5, 1.5, 0.9, "F");
+      doc.restoreGraphicsState();
+    };
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.0);
+    doc.setTextColor(0, 0, 0);
+    if (!dryRun) {
+      drawUserIcon(leftMargin + 1.2, y - 0.8);
+      doc.text("BILL TO", leftMargin + 4.2, y);
+    }
+    y += 4.8;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(15.0); // Large and bold to match reference
+    doc.setTextColor(0, 0, 0);
+    const patientLines = doc.splitTextToSize(receiptData.patient.toUpperCase(), contentWidth);
+    patientLines.forEach((line: string) => {
+      if (!dryRun) {
+        doc.text(line, leftMargin, y);
+      }
+      y += 5.2;
+    });
 
     if (receiptData.patientMobile) {
       const cleanedMobile = receiptData.patientMobile.replace("+91", "").trim();
       const mobStr = `+91 ${cleanedMobile}`;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11.0);
       if (!dryRun) {
-        doc.setFont("courier", "normal");
-        doc.setFontSize(8);
         doc.text(mobStr, leftMargin, y);
       }
-      y += 4.5;
-    } else {
-      y += 0.5;
+      y += 5.5;
     }
 
-    // Dashed divider
-    y += 1;
+    // Dashed divider below Patient section
+    y += 1.0;
     if (!dryRun) {
+      doc.saveGraphicsState();
       doc.setDrawColor(0, 0, 0);
-      doc.setLineWidth(0.2);
-      doc.setLineDashPattern([1.2, 1.2], 0);
+      doc.setLineWidth(0.3);
+      doc.setLineDashPattern([1.5, 1.5], 0);
       doc.line(leftMargin, y, 80 - leftMargin, y);
       doc.setLineDashPattern([], 0);
+      doc.restoreGraphicsState();
     }
-    y += 4.5;
+    y += 6.0;
 
-    // 5. Columns Header
-    doc.setFont("courier", "bold");
-    doc.setFontSize(8);
+    // 8. Solid Black Table Header with Rupee Symbol support
+    const colLeftX = leftMargin + 1.5;
+    const colRightX = 80 - leftMargin - 1.5;
+
+    const drawRupeeSymbol = (d: jsPDF, rx: number, ry: number, size: number = 1.0, colorOverride?: [number, number, number]) => {
+      d.saveGraphicsState();
+      if (colorOverride) {
+        d.setDrawColor(colorOverride[0], colorOverride[1], colorOverride[2]);
+      }
+      d.setLineWidth(0.28 * size);
+      
+      // Horizontal top line
+      d.line(rx, ry - 2.1 * size, rx + 1.8 * size, ry - 2.1 * size);
+      // Horizontal mid line
+      d.line(rx, ry - 1.1 * size, rx + 1.4 * size, ry - 1.1 * size);
+      // Vertical stem
+      d.line(rx + 0.5 * size, ry - 2.1 * size, rx + 0.5 * size, ry - 1.1 * size);
+      // Curve part
+      d.line(rx + 0.5 * size, ry - 2.1 * size, rx + 1.2 * size, ry - 2.1 * size);
+      d.line(rx + 1.2 * size, ry - 2.1 * size, rx + 1.5 * size, ry - 1.7 * size);
+      d.line(rx + 1.5 * size, ry - 1.7 * size, rx + 1.5 * size, ry - 1.4 * size);
+      d.line(rx + 1.5 * size, ry - 1.4 * size, rx + 1.2 * size, ry - 1.1 * size);
+      d.line(rx + 1.2 * size, ry - 1.1 * size, rx + 0.5 * size, ry - 1.1 * size);
+      // Slanted leg
+      d.line(rx + 0.5 * size, ry - 1.1 * size, rx + 1.5 * size, ry + 0.5 * size);
+      
+      d.restoreGraphicsState();
+    };
+
     if (!dryRun) {
-      doc.text("PROCEDURE", leftMargin, y);
-      doc.text("AMOUNT", 80 - leftMargin, y, { align: "right" });
+      doc.saveGraphicsState();
+      doc.setFillColor(0, 0, 0);
+      doc.rect(leftMargin, y - 4.2, 70, 5.5, "F");
+      
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+      doc.setTextColor(255, 255, 255);
+      doc.text("TREATMENT DETAILS", colLeftX, y - 0.5);
+      
+      const amtText = "AMOUNT (  )";
+      doc.text(amtText, colRightX, y - 0.5, { align: "right" });
+      const parenW = doc.getTextWidth(")");
+      drawRupeeSymbol(doc, colRightX - parenW - 2.1, y - 0.5, 0.72, [255, 255, 255]);
+      doc.restoreGraphicsState();
     }
-    y += 4;
+    y += 3.5;
 
-    // Dashed divider
-    y += 1;
-    if (!dryRun) {
-      doc.setDrawColor(0, 0, 0);
-      doc.setLineWidth(0.2);
-      doc.setLineDashPattern([1.2, 1.2], 0);
-      doc.line(leftMargin, y, 80 - leftMargin, y);
-      doc.setLineDashPattern([], 0);
-    }
-    y += 4.5;
-
-    // 6. Treatment List Items
-    doc.setFont("courier", "normal");
-    doc.setFontSize(8);
-
-    receiptData.items.forEach((item) => {
+    // 9. Render Treatments List with index boxes (01, 02) exactly like reference image
+    receiptData.items.forEach((item, idx) => {
       const amountStr = Number(item.amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const amountWidth = doc.getTextWidth(amountStr);
-      const maxNameWidth = contentWidth - amountWidth - 4; // 4mm margin
+      
+      const indexBoxW = 8.0;
+      const indexBoxH = 6.0;
+      const indexBoxX = leftMargin;
+      const indexBoxY = y;
+      
+      const indexStr = String(idx + 1).padStart(2, "0");
+      
+      if (!dryRun) {
+         doc.saveGraphicsState();
+         doc.setDrawColor(0, 0, 0);
+         doc.setLineWidth(0.35);
+         doc.roundedRect(indexBoxX, indexBoxY, indexBoxW, indexBoxH, 1.2, 1.2, "S");
+         
+         doc.setFont("helvetica", "bold");
+         doc.setFontSize(9.0);
+         doc.setTextColor(0, 0, 0);
+         const indexTextW = doc.getTextWidth(indexStr);
+         doc.text(indexStr, indexBoxX + (indexBoxW - indexTextW) / 2, indexBoxY + 4.3);
+         doc.restoreGraphicsState();
+      }
+      
+      const nameStartX = leftMargin + 11.0;
+      const maxNameWidth = colRightX - nameStartX - amountWidth - 4;
+      
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11.5);
+      doc.setTextColor(0, 0, 0);
       
       const itemLines = doc.splitTextToSize(item.name, maxNameWidth);
-      itemLines.forEach((line: string, idx: number) => {
+      let nameY = y + 4.3;
+      
+      itemLines.forEach((line: string, lineIdx: number) => {
         if (!dryRun) {
-          doc.text(line, leftMargin, y);
-          if (idx === 0) {
-            doc.text(amountStr, 80 - leftMargin, y, { align: "right" });
+          doc.text(line, nameStartX, nameY);
+          if (lineIdx === 0) {
+            doc.text(amountStr, colRightX, nameY, { align: "right" });
           }
         }
-        y += 3.8;
+        nameY += 4.8;
       });
-      y += 1.2;
+      
+      const rowHeight = Math.max(indexBoxH, (itemLines.length * 4.8) + 1.0);
+      y += rowHeight;
+      
+      if (idx < receiptData.items.length - 1) {
+        y += 2.0;
+        if (!dryRun) {
+          doc.saveGraphicsState();
+          doc.setDrawColor(0, 0, 0);
+          doc.setLineWidth(0.2);
+          doc.setLineDashPattern([1.5, 1.5], 0);
+          doc.line(leftMargin, y, 80 - leftMargin, y);
+          doc.setLineDashPattern([], 0);
+          doc.restoreGraphicsState();
+        }
+        y += 3.5;
+      } else {
+        y += 2.0;
+      }
     });
 
-    // Dashed divider
-    y += 1.5;
+    // Single dashed separator before Grand Total
+    y += 1.0;
     if (!dryRun) {
+      doc.saveGraphicsState();
       doc.setDrawColor(0, 0, 0);
-      doc.setLineWidth(0.2);
-      doc.setLineDashPattern([1.2, 1.2], 0);
+      doc.setLineWidth(0.3);
+      doc.setLineDashPattern([1.5, 1.5], 0);
       doc.line(leftMargin, y, 80 - leftMargin, y);
       doc.setLineDashPattern([], 0);
+      doc.restoreGraphicsState();
     }
-    y += 5.5;
+    y += 6.0;
 
-    // 7. Grand Total Block
+    // 10. GRAND TOTAL Bold Bordered Box with vertical divisor
     const totalVal = Number(receiptData.grandTotal || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    
-    doc.setFont("courier", "bold");
-    doc.setFontSize(9);
-    if (!dryRun) {
-      doc.text("GRAND TOTAL", leftMargin, y);
-    }
+    const totalBoxH = 12.0;
+    const totalBoxY = y - 4.5;
+    const textY = totalBoxY + 8.0;
 
-    doc.setFont("courier", "bold");
-    doc.setFontSize(11);
-    const totalValW = doc.getTextWidth(totalVal);
     if (!dryRun) {
-      doc.text(totalVal, 80 - leftMargin, y + 0.2, { align: "right" });
-      const rupeeX = 80 - leftMargin - totalValW - 3.2;
-      drawThermalRupeeSymbol(doc, rupeeX, y);
-    }
-    y += 6.5;
-
-    // Dashed divider
-    y += 1;
-    if (!dryRun) {
+      doc.saveGraphicsState();
       doc.setDrawColor(0, 0, 0);
-      doc.setLineWidth(0.2);
-      doc.setLineDashPattern([1.2, 1.2], 0);
-      doc.line(leftMargin, y, 80 - leftMargin, y);
-      doc.setLineDashPattern([], 0);
-    }
-    y += 5.5;
+      doc.setLineWidth(0.55);
+      doc.rect(leftMargin, totalBoxY, 70, totalBoxH, "S");
 
-    // 8. Payment Mode
-    doc.setFont("courier", "normal");
-    doc.setFontSize(8);
+      // Vertical partition line at x=40.0
+      doc.line(40.0, totalBoxY, 40.0, totalBoxY + totalBoxH);
+
+      // Left Column: Centered "GRAND TOTAL"
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11.0);
+      doc.text("GRAND TOTAL", 22.5, textY, { align: "center" });
+
+      // Right Column: Centered "₹ 3,000.00"
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(15.0);
+      const valW = doc.getTextWidth(totalVal);
+      const rupeeW = 3.0;
+      const gap = 1.5;
+      const totalCombinedW = rupeeW + gap + valW;
+      const startX = 57.5 - totalCombinedW / 2;
+
+      // Draw Rupee Symbol
+      drawRupeeSymbol(doc, startX, textY - 0.2, 1.3, [0, 0, 0]);
+
+      // Draw value text
+      doc.text(totalVal, startX + rupeeW + gap, textY);
+
+      doc.restoreGraphicsState();
+    }
+    y += totalBoxH + 2.0;
+
+    const drawCardIcon = (cx: number, cy: number) => {
+      doc.saveGraphicsState();
+      doc.setLineWidth(0.35);
+      doc.setDrawColor(0, 0, 0);
+      doc.roundedRect(cx, cy - 1.6, 4.5, 3.2, 0.5, 0.5, "S");
+      doc.setFillColor(0, 0, 0);
+      doc.rect(cx, cy - 1.0, 4.5, 0.8, "F");
+      doc.restoreGraphicsState();
+    };
+
+    // 11. PAYMENT MODE (Perfectly aligned and styled with rounded card box)
+    const pmY = y;
     if (!dryRun) {
-      doc.text("Payment Mode", leftMargin, y);
+      drawCardIcon(leftMargin, pmY + 2.5);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9.5);
+      doc.text("PAYMENT MODE", leftMargin + 6.0, pmY + 3.3);
     }
 
     const pMethod = (receiptData.paymentMethod || "UPI").toUpperCase();
-    doc.setFont("courier", "bold");
-    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
     const pMethodW = doc.getTextWidth(pMethod);
+    const pmBoxW = pMethodW + 8.0;
+    const pmBoxH = 6.0;
+    const pmBoxX = 80 - leftMargin - pmBoxW;
+    const pmBoxY = pmY + 0.5;
 
     if (!dryRun) {
-      const boxW = pMethodW + 5;
-      const boxH = 5.0;
-      const boxX = 80 - leftMargin - boxW;
-      const boxY = y - 3.5;
-
+      doc.saveGraphicsState();
       doc.setDrawColor(0, 0, 0);
       doc.setLineWidth(0.35);
-      doc.rect(boxX, boxY, boxW, boxH, "S");
-
-      doc.text(pMethod, boxX + 2.5, y + 0.1);
+      doc.roundedRect(pmBoxX, pmBoxY, pmBoxW, pmBoxH, 1.0, 1.0, "S");
+      doc.text(pMethod, pmBoxX + 4.0, pmY + 4.7);
+      doc.restoreGraphicsState();
     }
-    y += 8.5;
+    y += pmBoxH + 5.0;
 
-    // 9. Centered Footer Texts
-    doc.setFont("courier", "bold");
-    doc.setFontSize(8.5);
-    const thankYouMsg = "Thank you for your visit!";
+    // Single solid line divider below payment mode
+    if (!dryRun) {
+      doc.saveGraphicsState();
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.35);
+      doc.line(leftMargin, y, 80 - leftMargin, y);
+      doc.restoreGraphicsState();
+    }
+    y += 7.0;
+
+    // 12. Centered Thank you message
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.0);
+    const thankYouMsg = "Thank You For Your Visit!";
     if (!dryRun) {
       const w = doc.getTextWidth(thankYouMsg);
       doc.text(thankYouMsg, (80 - w) / 2, y);
     }
-    y += 4.2;
+    y += 6.0;
 
-    doc.setFont("courier", "italic");
-    doc.setFontSize(7.5);
-    const keepSmilingMsg = "Keep smiling.";
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.0);
+    const keepSmilingMsg = "Keep Smiling.";
     if (!dryRun) {
       const w = doc.getTextWidth(keepSmilingMsg);
-      doc.text(keepSmilingMsg, (80 - w) / 2, y);
+      const startX = (80 - w) / 2;
+      doc.text(keepSmilingMsg, startX, y);
+      
+      doc.saveGraphicsState();
+      doc.setLineWidth(0.25);
+      doc.setDrawColor(0, 0, 0);
+      doc.line(leftMargin + 5.0, y - 0.8, startX - 3.0, y - 0.8);
+      doc.line(startX + w + 3.0, y - 0.8, 80 - leftMargin - 5.0, y - 0.8);
+      doc.restoreGraphicsState();
     }
-    y += 6.5;
+    y += 8.0;
 
-    // 10. Vector Barcode
+    // 13. Barcode & Invoice text below it (Centered perfectly)
     if (!dryRun) {
-      const barcodeW = 42;
+      const barcodeW = 46;
       const barcodeH = 8;
       const barcodeX = (80 - barcodeW) / 2;
       drawBarcode(doc, barcodeX, y, barcodeW, barcodeH);
     }
-    y += 10.5;
+    y += 11.0;
 
-    doc.setFont("courier", "normal");
-    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.0);
     if (!dryRun) {
       const billNoW = doc.getTextWidth(receiptData.billNo);
       doc.text(receiptData.billNo, (80 - billNoW) / 2, y);
     }
     y += 4.5;
 
-    return y + 5; // bottom padding
+    // Generous bottom padding to ensure the printout fits without edge clipping
+    return y + 12;
   };
 
-  // Helper inside to draw black Indian Rupee symbol
-  const drawThermalRupeeSymbol = (d: jsPDF, rx: number, ry: number) => {
-    d.saveGraphicsState();
-    d.setDrawColor(0, 0, 0);
-    d.setLineWidth(0.4);
-    
-    const topY = ry - 2.8;
-    const midY = ry - 1.4;
-    
-    // Top horizontal bar
-    d.line(rx, topY, rx + 2.2, topY);
-    // Middle horizontal bar
-    d.line(rx, midY, rx + 1.8, midY);
-    // Vertical stem
-    d.line(rx + 0.6, topY, rx + 0.6, midY + 0.8);
-    
-    // Curved loop
-    d.line(rx + 0.6, topY, rx + 1.5, topY);
-    d.line(rx + 1.5, topY, rx + 1.9, topY + 0.3);
-    d.line(rx + 1.9, topY + 0.3, rx + 1.9, midY - 0.3);
-    d.line(rx + 1.9, midY - 0.3, rx + 1.4, midY);
-    d.line(rx + 1.4, midY, rx + 0.6, midY);
-    
-    // Diagonal leg
-    d.line(rx + 0.6, midY + 0.4, rx + 2.0, ry + 0.8);
-    
-    d.restoreGraphicsState();
-  };
-
-  // Helper inside to draw a gorgeous realistic barcode
   const drawBarcode = (d: jsPDF, bx: number, by: number, width: number, height: number) => {
     d.saveGraphicsState();
     d.setFillColor(0, 0, 0);
@@ -818,7 +1000,6 @@ export function generateThermalReceiptPDF(receiptData: ReceiptData): jsPDF {
       2, 1, 3, 1, 1, 2, 4, 1, 1, 3, 2, 1, 1, 2, 2, 2, 1, 3, 1, 1,
       2, 1, 3, 1, 1, 2, 4, 1, 1, 3, 2, 1, 1, 2, 2, 2, 1, 3, 1, 1
     ];
-    // sum is 68 units, width of each unit is width / 68
     const unitW = width / 68;
     pattern.forEach((val, i) => {
       const barW = val * unitW;
@@ -831,12 +1012,11 @@ export function generateThermalReceiptPDF(receiptData: ReceiptData): jsPDF {
     d.restoreGraphicsState();
   };
 
-  // Helper to draw jagged paper edge cut triangles at top
   const drawTopJaggedEdge = (d: jsPDF) => {
     d.saveGraphicsState();
-    d.setFillColor(235, 235, 235);
-    d.setDrawColor(235, 235, 235);
-    const h = 2.5;
+    d.setFillColor(242, 242, 242);
+    d.setDrawColor(242, 242, 242);
+    const h = 2.0;
     const w = 3.0;
     for (let x = 0; x < 80; x += w) {
       d.triangle(x, 0, x + w / 2, h, x + w, 0, "F");
@@ -844,12 +1024,11 @@ export function generateThermalReceiptPDF(receiptData: ReceiptData): jsPDF {
     d.restoreGraphicsState();
   };
 
-  // Helper to draw jagged paper edge cut triangles at bottom
   const drawBottomJaggedEdge = (d: jsPDF, finalHeight: number) => {
     d.saveGraphicsState();
-    d.setFillColor(235, 235, 235);
-    d.setDrawColor(235, 235, 235);
-    const h = 2.5;
+    d.setFillColor(242, 242, 242);
+    d.setDrawColor(242, 242, 242);
+    const h = 2.0;
     const w = 3.0;
     for (let x = 0; x < 80; x += w) {
       d.triangle(x, finalHeight, x + w / 2, finalHeight - h, x + w, finalHeight, "F");
@@ -857,7 +1036,6 @@ export function generateThermalReceiptPDF(receiptData: ReceiptData): jsPDF {
     d.restoreGraphicsState();
   };
 
-  // Create test document for dry run
   const testDoc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
@@ -865,23 +1043,19 @@ export function generateThermalReceiptPDF(receiptData: ReceiptData): jsPDF {
   });
 
   const calculatedHeight = runLayout(true, testDoc);
-  const finalHeight = Math.max(calculatedHeight, 90);
+  const finalHeight = Math.max(calculatedHeight, 110);
 
-  // Create actual document with precise height
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
     format: [80, finalHeight]
   });
 
-  // Render content onto actual document
   runLayout(false, doc);
 
-  // Draw simulated jagged paper cutouts
   drawTopJaggedEdge(doc);
   drawBottomJaggedEdge(doc, finalHeight);
 
-  // Side guides for simulated print layout
   doc.setDrawColor(220, 220, 220);
   doc.setLineWidth(0.2);
   doc.line(2, 0, 2, finalHeight);
@@ -1142,7 +1316,7 @@ export function generateA4InvoicePDF(receiptData: ReceiptData): jsPDF {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
   doc.setTextColor(107, 33, 168); // Violet-700
-  doc.text("RK DENTAL CLINIC", textStartX, y + 4);
+  doc.text(receiptData.clinic.toUpperCase(), textStartX, y + 4);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
@@ -1550,7 +1724,7 @@ export function generateA4InvoicePDF(receiptData: ReceiptData): jsPDF {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9.5);
   doc.setTextColor(107, 33, 168); // Violet
-  doc.text("Thank you for choosing RK Dental Clinic.", 105, footerY + 8, { align: "center" });
+  doc.text(receiptData.footerMessage || "Thank you for choosing RK Dental Clinic.", 105, footerY + 8, { align: "center" });
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);
@@ -2147,7 +2321,7 @@ export function generateA4PrescriptionPDF(prescription: Prescription, settings: 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9.5);
   doc.setTextColor(107, 33, 168); // Violet
-  doc.text("Thank you for choosing RK Dental Clinic.", 105, footerY + 8, { align: "center" });
+  doc.text(settings.bill_footer_message || "Thank you for choosing RK Dental Clinic.", 105, footerY + 8, { align: "center" });
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7.5);

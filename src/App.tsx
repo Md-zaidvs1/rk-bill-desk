@@ -16,7 +16,7 @@ import SettingsPage from "./components/SettingsPage";
 import DataManager from "./DataManager";
 import { triggerThermalBillPrint } from "./services/printBridge";
 import RKDentalLogo from "./components/RKDentalLogo";
-import { supabase, seedDefaultUsers } from "./supabaseClient";
+import { supabase, seedDefaultUsers, seedDefaultSettings } from "./supabaseClient";
 
 type ActiveTabType = "dashboard" | "treatment_desk" | "billing" | "history" | "prescriptions" | "prescription_history" | "backup" | "settings";
 
@@ -32,6 +32,7 @@ export default function App() {
   // Seed default users (receptionist and doctor) into remote database if configured
   useEffect(() => {
     seedDefaultUsers();
+    seedDefaultSettings();
   }, []);
 
   useEffect(() => {
@@ -89,9 +90,43 @@ export default function App() {
           }
         }
         setSettings({ ...data, ...extra });
+      } else {
+        throw new Error("No settings data returned from database");
       }
     } catch (err) {
-      console.error("Error loading clinic profile settings from cloud database:", err);
+      console.error("Error loading clinic profile settings from cloud database, loading offline fallback:", err);
+      // Load fallback from localStorage or defaults
+      const offlineSettingsStr = localStorage.getItem("rk_fallback_settings");
+      let offlineSettings = null;
+      if (offlineSettingsStr) {
+        try {
+          const arr = JSON.parse(offlineSettingsStr);
+          offlineSettings = Array.isArray(arr) ? arr[0] : arr;
+        } catch (e) {
+          console.error("Error parsing fallback settings:", e);
+        }
+      }
+      
+      const extraJson = localStorage.getItem("rk_bill_desk_extra_settings");
+      let extra = {};
+      if (extraJson) {
+        try {
+          extra = JSON.parse(extraJson);
+        } catch (e) {
+          console.error("Error parsing extra settings:", e);
+        }
+      }
+      
+      const defaultInitial = {
+        id: "config",
+        clinic_name: "RK Dental Clinic",
+        address: "123 Dental Street, Suite A, iPadOS Cloud Office",
+        phone: "+91 98765 43210",
+        receipt_footer: "Thank you for your visit! Keep smiling.",
+        whatsapp_message_template: "Hello {patient_name},\n\nHere is your prescription from {clinic_name}:\n\n{medicines_text}\n\nNotes: {notes}\n\nKeep smiling! - Dr. V. Radhakrishnan BDS., D.Endo."
+      };
+      
+      setSettings({ ...(offlineSettings || defaultInitial), ...extra });
     }
   };
 
