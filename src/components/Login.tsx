@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Lock, User as UserIcon, ShieldAlert, Activity, ShieldCheck } from "lucide-react";
 import { User } from "../types";
 import { supabase } from "../supabaseClient";
+import RKDentalLogo from "./RKDentalLogo";
 
 interface LoginProps {
   onLoginSuccess: (user: User) => void;
@@ -64,16 +65,12 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
         <div className="p-8">
           {/* Logo and Dental branding */}
-          <div className="text-center mb-8">
-            <div className="mx-auto w-16 h-16 bg-blue-50 border-2 border-blue-100 flex items-center justify-center rounded-full mb-3 shadow-inner">
-              {/* Dental Tooth-like cross vector icon */}
-              <svg className="w-8 h-8 text-blue-800" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2C11.5 2 11 3.5 10.5 5.5C10 7.5 9 8 8 8.5C7 9 5.5 8.5 4.5 9C3.5 9.5 3 10.5 3.5 12C4 13.5 5.5 14 6 15.5C6.5 17 6 18.5 7 19.5C8 20.5 9.5 20.5 11 19.5C12.5 18.5 13 18.5 14.5 19.5C16 20.5 17.5 20.5 18.5 19.5C19.5 18.5 19 17 19.5 15.5C20 14 21.5 13.5 22 12C22.5 10.5 22 9.5 21 9C20 8.5 18.5 9 17.5 8.5C16.5 8 15.5 7.5 15 5.5C14.5 3.5 14 2 13.5 2H12Z" />
-                <path d="M12 8V14M9 11H15" />
-              </svg>
-            </div>
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight font-sans">RK Bill Desk</h1>
-            <p className="text-xs font-semibold text-blue-800 tracking-wider uppercase mt-1">Dental Billing & Prescription Suite</p>
+          <div className="text-center mb-8 flex flex-col items-center">
+            <RKDentalLogo className="w-36 h-36" showText={true} />
+            <div className="h-0.5 w-12 bg-amber-500/20 rounded my-3"></div>
+            <span className="text-[10px] font-extrabold text-blue-800 tracking-widest uppercase bg-blue-50 px-3 py-1.5 rounded-full border border-blue-100">
+              Billing & Prescription Suite
+            </span>
           </div>
 
           {error && (

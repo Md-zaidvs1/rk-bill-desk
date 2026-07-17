@@ -2,23 +2,24 @@ import React from "react";
 
 interface RKDentalLogoProps {
   className?: string;
+  showText?: boolean;
 }
 
-export default function RKDentalLogo({ className = "w-12 h-12" }: RKDentalLogoProps) {
+export default function RKDentalLogo({ className = "w-12 h-12", showText = false }: RKDentalLogoProps) {
   return (
     <svg 
-      viewBox="0 0 400 400" 
+      viewBox={showText ? "0 0 400 420" : "0 0 400 362"} 
       className={`${className} shrink-0`} 
       fill="none" 
       xmlns="http://www.w3.org/2000/svg"
     >
       <defs>
         <linearGradient id="gold-metallic" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#BF953F" />
-          <stop offset="25%" stopColor="#FCF6BA" />
-          <stop offset="50%" stopColor="#B38728" />
-          <stop offset="75%" stopColor="#FBF5B7" />
-          <stop offset="100%" stopColor="#AA771C" />
+          <stop offset="0%" stopColor="#D4AF37" />
+          <stop offset="25%" stopColor="#FFFDD0" />
+          <stop offset="50%" stopColor="#AA771C" />
+          <stop offset="75%" stopColor="#FDF6C7" />
+          <stop offset="100%" stopColor="#8B6508" />
         </linearGradient>
       </defs>
       
@@ -48,13 +49,13 @@ export default function RKDentalLogo({ className = "w-12 h-12" }: RKDentalLogoPr
         />
         
         {/* Spherical crown tips (pearls) */}
-        <circle cx="137" cy="112" r="4.5" fill="url(#gold-metallic)" />
-        <circle cx="150" cy="75" r="5.5" fill="url(#gold-metallic)" />
+        <circle cx="137" cy="112" r="5" fill="url(#gold-metallic)" />
+        <circle cx="150" cy="75" r="6" fill="url(#gold-metallic)" />
         <circle cx="175" cy="98" r="5" fill="url(#gold-metallic)" />
-        <circle cx="200" cy="62" r="7" fill="url(#gold-metallic)" />
+        <circle cx="200" cy="62" r="7.5" fill="url(#gold-metallic)" />
         <circle cx="225" cy="98" r="5" fill="url(#gold-metallic)" />
-        <circle cx="250" cy="75" r="5.5" fill="url(#gold-metallic)" />
-        <circle cx="263" cy="112" r="4.5" fill="url(#gold-metallic)" />
+        <circle cx="250" cy="75" r="6" fill="url(#gold-metallic)" />
+        <circle cx="263" cy="112" r="5" fill="url(#gold-metallic)" />
       </g>
       
       {/* Sleek tooth outline (Gold Metallic) */}
@@ -90,7 +91,7 @@ export default function RKDentalLogo({ className = "w-12 h-12" }: RKDentalLogoPr
           cx="262" 
           cy="262" 
           r="34" 
-          fill="#1e1b4b" 
+          fill="#0b091a" 
           stroke="url(#gold-metallic)" 
           strokeWidth="6" 
         />
@@ -132,6 +133,36 @@ export default function RKDentalLogo({ className = "w-12 h-12" }: RKDentalLogoPr
           fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
         >K</text>
       </g>
+
+      {/* Dynamic branding text under the logo */}
+      {showText && (
+        <g>
+          <text 
+            x="200" 
+            y="388" 
+            textAnchor="middle" 
+            fill="url(#gold-metallic)" 
+            fontSize="22" 
+            fontWeight="bold" 
+            letterSpacing="3"
+            fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+          >
+            RK DENTAL
+          </text>
+          <text 
+            x="200" 
+            y="406" 
+            textAnchor="middle" 
+            fill="#a1a1aa" 
+            fontSize="8.5" 
+            fontWeight="600" 
+            letterSpacing="2.5"
+            fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+          >
+            GENERAL AND COSMETIC DENTISTRY
+          </text>
+        </g>
+      )}
     </svg>
   );
 }

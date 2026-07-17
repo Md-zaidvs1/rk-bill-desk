@@ -364,82 +364,91 @@ export default function PrintReceiver() {
         Only #thermal-receipt-print-area is displayed.
       */}
       {activeJob && (
-        <div id="thermal-receipt-print-area" className="hidden">
-          {/* Header block */}
+        <div id="thermal-receipt-print-area" className="hidden" style={{ fontFamily: "system-ui, -apple-system, sans-serif", width: "80mm", padding: "0 5mm", color: "#000000", boxSizing: "border-box" }}>
+          {/* Centered Clinic Name (Main Header) instead of TICKET */}
           <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: "14px", fontWeight: "bold", textTransform: "uppercase", lineHeight: "1.3" }}>
+            <div style={{ fontSize: "14px", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "0.5px", margin: "10px 0 2px 0" }}>
               {displayClinicName}
             </div>
-            <div style={{ fontSize: "10px", lineHeight: "1.3", marginTop: "4px", whiteSpace: "pre-line" }}>
-              {displayAddress}
+            {displayAddress && (
+              <div style={{ fontSize: "10px", color: "#374151", whiteSpace: "pre-line", lineHeight: "1.3" }}>
+                {displayAddress}
+              </div>
+            )}
+            {displayPhone && (
+              <div style={{ fontSize: "10px", color: "#374151", marginTop: "2px" }}>
+                Ph: {displayPhone}
+              </div>
+            )}
+          </div>
+
+          <div style={{ borderTop: "1.2px dotted #000000", margin: "6px 0" }}></div>
+
+          {/* Subheaders: Date (Left), Invoice (Right, no folio word), Patient details */}
+          <div style={{ fontSize: "11px", lineHeight: "1.4" }}>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span>Date: {activeJob.date} {activeJob.time}</span>
+              <span style={{ fontWeight: "bold" }}>{activeJob.bill_number}</span>
             </div>
-            <div style={{ fontSize: "10px", lineHeight: "1.3", fontWeight: "bold", marginTop: "4px" }}>
-              Mobile: {displayPhone}
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: "2px" }}>
+              <span>Patient: {activeJob.patient_name?.toUpperCase()}</span>
+              {activeJob.patient_mobile && <span>Ph: {activeJob.patient_mobile}</span>}
             </div>
           </div>
 
-          <div style={{ borderTop: "1px dashed #000000", margin: "10px 0" }}></div>
+          <div style={{ borderTop: "1.2px dotted #000000", margin: "6px 0" }}></div>
 
-          {/* Bill Details */}
-          <div style={{ fontSize: "11px", lineHeight: "1.3" }}>
-            <div><strong>Bill No:</strong> {activeJob.bill_number}</div>
-            <div><strong>Date:</strong> {activeJob.date}</div>
-            <div><strong>Time:</strong> {activeJob.time}</div>
+          {/* Column Headers */}
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", fontWeight: "bold" }}>
+            <span>PROCEDURE</span>
+            <span>AMOUNT</span>
           </div>
 
-          {/* Patient */}
-          <div style={{ marginTop: "10px", fontSize: "11px", lineHeight: "1.3" }}>
-            <div style={{ fontWeight: "bold", color: "#666666", fontSize: "9px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-              Patient Details:
-            </div>
-            <div style={{ fontWeight: "bold", color: "#000000", marginTop: "2px" }}>
-              {activeJob.patient_name}
-            </div>
-            <div style={{ fontWeight: "semibold" }}>
-              Mob: {activeJob.patient_mobile || "N/A"}
-            </div>
-          </div>
+          <div style={{ borderTop: "1.2px dotted #000000", margin: "6px 0" }}></div>
 
-          <div style={{ borderTop: "1px dashed #000000", margin: "10px 0" }}></div>
-
-          {/* Table Header */}
-          <div style={{ display: "flex", justifyContent: "between", fontSize: "11px", fontWeight: "bold", borderBottom: "1px dashed #000000", paddingBottom: "4px", marginBottom: "6px" }}>
-            <span style={{ width: "70%", textAlign: "left" }}>Treatment</span>
-            <span style={{ width: "30%", textAlign: "right" }}>Amt</span>
-          </div>
-
-          {/* Items list */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          {/* Items list (Redesigned with larger readable fonts) */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
             {(activeJob.items || activeJob.bill_items || []).map((item: any, idx: number) => (
-              <div key={idx} style={{ display: "flex", justifyContent: "between", width: "100%", fontSize: "11px", lineHeight: "1.3" }}>
-                <span style={{ width: "70%", textAlign: "left", paddingRight: "8px" }}>{item.treatment_name || "Dental Treatment"}</span>
-                <span style={{ width: "30%", textAlign: "right", fontWeight: "bold" }}>{Number(item.amount || 0).toFixed(2)}</span>
+              <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: "11.5px", lineHeight: "1.3" }}>
+                <span style={{ textAlign: "left", paddingRight: "8px", maxWidth: "70%" }}>{item.treatment_name || "Dental Treatment"}</span>
+                <span style={{ textAlign: "right", fontWeight: "bold", whiteSpace: "nowrap" }}>{Number(item.amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             ))}
           </div>
 
-          <div style={{ borderTop: "1px dashed #000000", margin: "10px 0" }}></div>
+          <div style={{ borderTop: "1.2px dotted #000000", margin: "6px 0" }}></div>
 
           {/* Totals block */}
-          <div style={{ fontSize: "11px", lineHeight: "1.3" }}>
-            <div style={{ display: "flex", justifyContent: "between", fontWeight: "bold", fontSize: "12px", padding: "2px 0" }}>
-              <span>Grand Total:</span>
-              <span>INR {Number(activeJob.grand_total).toFixed(2)}</span>
-            </div>
-            <div style={{ padding: "2px 0" }}>
-              <span>Payment Method: </span>
-              <span style={{ fontWeight: "bold", textTransform: "uppercase" }}>{activeJob.payment_method}</span>
-            </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", fontWeight: "bold" }}>
+            <span>GRAND TOTAL</span>
+            <span>₹ {Number(activeJob.grand_total || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
 
-          <div style={{ borderTop: "1px dashed #000000", margin: "10px 0" }}></div>
+          <div style={{ borderTop: "1.2px dotted #000000", margin: "6px 0" }}></div>
 
-          {/* Footer text */}
-          <div style={{ textAlign: "center", fontSize: "10px", fontStyle: "italic", lineHeight: "1.4", marginTop: "4px", whiteSpace: "pre-line" }}>
-            {displayFooter}
+          {/* Payment Method */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px" }}>
+            <span>Payment Mode</span>
+            <span style={{ border: "1px solid #000000", padding: "1px 5px", fontWeight: "bold" }}>{(activeJob.payment_method || "CASH").toUpperCase()}</span>
           </div>
 
-          <div style={{ borderTop: "1px dashed #000000", marginTop: "12px" }}></div>
+          <div style={{ borderTop: "1.2px dotted #000000", margin: "8px 0" }}></div>
+
+          {/* Centered footer */}
+          <div style={{ textAlign: "center", fontSize: "12px", fontWeight: "bold" }}>
+            THANK YOU FOR YOUR VISIT!
+          </div>
+          <div style={{ textAlign: "center", fontSize: "11px", marginTop: "2px" }}>
+            Keep smiling.
+          </div>
+
+          {/* Barcode representation */}
+          <div style={{ margin: "12px 0 3px 0", textAlign: "center", fontSize: "18px", letterSpacing: "1px", lineHeight: "1.0", color: "#000000" }}>
+            |||||||||||||||||||||||||||||
+          </div>
+          <div style={{ textAlign: "center", fontSize: "10px", letterSpacing: "0.5px" }}>
+            {activeJob.bill_number}
+          </div>
         </div>
       )}
 

@@ -3,6 +3,7 @@ import { Printer, X, Receipt, Download, Check, RefreshCw, AlertCircle, Server } 
 import { Bill, ClinicSettings } from "./types";
 import { printBridge, generateThermalPDF } from "./services/printBridge";
 import { getPrintBridgeSettings } from "./services/printBridgeConfig";
+import "./ReceiptPrint.css";
 import jsPDF from "jspdf";
 
 interface ReceiptPrintProps {
@@ -171,74 +172,55 @@ export default function ReceiptPrint({ bill, settings, onClose }: ReceiptPrintPr
             {/* Edge tearing effect decorations */}
             <div className="absolute top-[-3px] left-0 right-0 h-[3px] bg-[linear-gradient(135deg,_#09090b_2px,_transparent_0),_linear-gradient(-135deg,_#09090b_2px,_transparent_0)] bg-[size:4px_4px] pointer-events-none z-10"></div>
 
-            <div 
-              className="w-[80mm] max-w-full bg-white text-black font-mono text-[11px] leading-relaxed select-text p-6"
-              style={{ fontFamily: "'Courier New', Courier, monospace", boxSizing: "border-box" }}
-            >
-              {/* Header block */}
-              <div className="text-center">
-                <div className="text-[13px] font-bold tracking-tight uppercase leading-snug">{settings.clinic_name}</div>
-                <div className="text-[10px] leading-snug mt-1 whitespace-pre-line">{settings.address}</div>
-                <div className="text-[10px] leading-snug font-semibold mt-1">Mobile: {settings.phone}</div>
+            <div className="thermal-receipt-paper">
+              <div className="receipt-clinic-block">
+                <div className="receipt-clinic-name">{settings.clinic_name}</div>
+                <div className="receipt-clinic-meta">{settings.address}</div>
+                <div className="receipt-clinic-meta">Mobile: {settings.phone}</div>
               </div>
 
-              <div className="border-t border-dashed border-black my-2.5"></div>
+              <div className="receipt-title-pill">TAX INVOICE / RECEIPT</div>
 
-              {/* Bill Details */}
-              <div className="space-y-0.5 text-[10.5px]">
-                <div><span className="font-bold">Bill No:</span> {bill.bill_number}</div>
-                <div><span className="font-bold">Date:</span> {bill.date}</div>
-                <div><span className="font-bold">Time:</span> {bill.time}</div>
+              <div className="receipt-meta-grid">
+                <div className="receipt-meta-item"><span>Bill No</span><strong>{bill.bill_number}</strong></div>
+                <div className="receipt-meta-item"><span>Date</span><strong>{bill.date}</strong></div>
+                <div className="receipt-meta-item"><span>Time</span><strong>{bill.time}</strong></div>
               </div>
 
-              {/* Patient */}
-              <div className="mt-2.5 text-[10.5px]">
-                <div className="font-bold text-zinc-500 uppercase text-[9px] tracking-wider">Patient Details:</div>
-                <div className="font-bold text-black mt-0.5">{bill.patient_name}</div>
-                <div className="text-black font-semibold">Mob: {bill.patient_mobile || "N/A"}</div>
+              <div className="receipt-patient-block">
+                <div className="receipt-section-label">PATIENT DETAILS</div>
+                <div className="receipt-patient-name">{bill.patient_name}</div>
+                <div className="receipt-patient-phone">Mob: {bill.patient_mobile || "N/A"}</div>
               </div>
 
-              <div className="border-t border-dashed border-black my-2.5"></div>
-
-              {/* Table Header */}
-              <div className="flex justify-between text-[11px] font-bold border-b border-dashed border-black pb-1 mb-1.5">
-                <span className="w-[70%] text-left">Treatment</span>
-                <span className="w-[30%] text-right">Amt</span>
+              <div className="receipt-table-header">
+                <span>TREATMENT DETAILS</span>
+                <span>AMOUNT (₹)</span>
               </div>
 
-              {/* Items list */}
-              <div className="space-y-1.5">
+              <div className="receipt-items-list">
                 {items.map((item: any, idx: number) => (
-                  <div key={idx} className="flex items-end justify-between w-full text-[11px] leading-snug">
-                    <span className="w-[70%] break-words text-left pr-2">{item.treatment_name || "Dental Checkup"}</span>
-                    <span className="w-[30%] text-right font-bold shrink-0">{Number(item.amount || 0).toFixed(2)}</span>
+                  <div key={idx} className="receipt-item-row">
+                    <span className="receipt-item-name">{item.treatment_name || "Dental Checkup"}</span>
+                    <span className="receipt-item-price">{Number(item.amount || 0).toFixed(2)}</span>
                   </div>
                 ))}
               </div>
 
-              <div className="border-t border-dashed border-black my-2.5"></div>
-
-              {/* Totals block */}
-              <div className="space-y-1 text-[11px]">
-                <div className="flex justify-between font-bold text-[12px] py-0.5">
-                  <span>Grand Total:</span>
-                  <span>INR {Number(bill.grand_total).toFixed(2)}</span>
-                </div>
-                <div className="py-0.5">
-                  <span>Payment Method: </span>
-                  <span className="font-bold uppercase text-zinc-800">{bill.payment_method}</span>
-                </div>
+              <div className="receipt-grand-total">
+                <span>Grand Total</span>
+                <span>INR {Number(bill.grand_total).toFixed(2)}</span>
               </div>
 
-              <div className="border-t border-dashed border-black my-2.5"></div>
-
-              {/* Footer text */}
-              <div className="text-center text-[10px] whitespace-pre-line leading-relaxed italic mt-1">
-                {settings.receipt_footer}
+              <div className="receipt-payment-box">
+                <span className="receipt-payment-label">Payment Mode</span>
+                <span className="receipt-payment-value">{bill.payment_method}</span>
               </div>
 
-              <div className="border-t border-dashed border-black mt-3"></div>
-
+              <div className="receipt-footer">
+                <div>Thank You For Your Visit!</div>
+                <div>Keep Smiling.</div>
+              </div>
             </div>
 
             <div className="absolute bottom-[-3px] left-0 right-0 h-[3px] bg-[linear-gradient(45deg,_#09090b_2px,_transparent_0),_linear-gradient(-45deg,_#09090b_2px,_transparent_0)] bg-[size:4px_4px] pointer-events-none z-10"></div>

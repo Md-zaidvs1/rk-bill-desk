@@ -700,8 +700,8 @@ function ReceptionistConsole({ user, settings, onLogout, currentTime }: Receptio
       {/* HEADER */}
       <header className="bg-white border-b border-violet-100 flex flex-col md:flex-row md:items-center justify-between px-6 py-4 shadow-sm shrink-0">
         <div className="flex items-center space-x-3.5">
-          <div className="bg-violet-600 text-white p-2 font-bold rounded-xl shrink-0 flex items-center justify-center shadow-md shadow-violet-600/15">
-            <HeartPulse className="w-5 h-5 text-white" />
+          <div className="bg-[#0b091a] text-white p-1 rounded-xl shrink-0 flex items-center justify-center shadow-md shadow-violet-600/15 border border-amber-500/20">
+            <RKDentalLogo className="w-10 h-10" />
           </div>
           <div>
             <div className="flex items-center space-x-2.5">

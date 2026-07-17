@@ -506,490 +506,31 @@ export function generateThermalReceiptPDF(receiptData: ReceiptData): jsPDF {
   const leftMargin = 5;
   const contentWidth = 70; // 80 - 10
 
-  const runLayout = (dryRun: boolean, doc: jsPDF) => {
-    let y = 12;
+  const drawRupeeSymbol = (d: jsPDF, rx: number, ry: number, size: number = 1.0) => {
+    d.saveGraphicsState();
+    d.setDrawColor(0, 0, 0);
+    d.setLineWidth(0.35 * size);
     
-    // Use Helvetica throughout for clean modern look, matching reference image
-    doc.setFont("helvetica", "normal");
-
-    // 1. Clinic Name (Very large, bold, centered)
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(22.0); // Extremely bold, prominent to match reference image exactly
-    doc.setTextColor(0, 0, 0);
-    const clinicLines = doc.splitTextToSize(receiptData.clinic.toUpperCase(), contentWidth);
-    clinicLines.forEach((line: string) => {
-      if (!dryRun) {
-        const textWidth = doc.getTextWidth(line);
-        doc.text(line, (80 - textWidth) / 2, y);
-      }
-      y += 6.5;
-    });
-    y += 1.0;
-
-    // Elegant divider with middle diamond (Centered perfectly)
-    if (!dryRun) {
-      doc.saveGraphicsState();
-      doc.setLineWidth(0.35);
-      doc.setDrawColor(0, 0, 0);
-      doc.line(leftMargin, y, 37.5, y);
-      doc.line(42.5, y, 80 - leftMargin, y);
-      doc.setFillColor(0, 0, 0);
-      doc.triangle(40, y - 1.0, 38.8, y, 40, y + 1.0, "F");
-      doc.triangle(40, y - 1.0, 41.2, y, 40, y + 1.0, "F");
-      doc.restoreGraphicsState();
-    }
-    y += 5.5;
-
-    // 2. Address (Centered perfectly, no icon to match reference image exactly)
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9.0);
-    doc.setTextColor(0, 0, 0);
-    if (receiptData.address) {
-      const addrLines = doc.splitTextToSize(receiptData.address, contentWidth);
-      addrLines.forEach((line: string) => {
-        if (!dryRun) {
-          const textWidth = doc.getTextWidth(line);
-          const startX = (80 - textWidth) / 2;
-          doc.text(line, startX, y);
-        }
-        y += 4.5;
-      });
-    }
-
-    y += 1.5;
-
-    // 3. Phone/Mobile Number (Centered perfectly, bold with a slanted receiver icon)
-    const drawSlantedPhone = (px: number, py: number) => {
-      doc.saveGraphicsState();
-      doc.setLineWidth(0.8);
-      doc.setLineCap("round");
-      doc.setDrawColor(0, 0, 0);
-      // Curved hook from top-right to bottom-left:
-      doc.line(px + 1.1, py - 0.9, px + 0.7, py - 0.5);
-      doc.line(px + 0.7, py - 0.5, px - 0.1, py + 0.3);
-      doc.line(px - 0.1, py + 0.3, px - 0.9, py + 1.1);
-      // End bulbs
-      doc.setFillColor(0, 0, 0);
-      doc.circle(px + 1.3, py - 0.9, 0.65, "F");
-      doc.circle(px - 0.9, py + 1.3, 0.65, "F");
-      doc.restoreGraphicsState();
-    };
-
-    if (receiptData.phone) {
-      const cleanedPhone = receiptData.phone.replace("+91", "").trim();
-      const phoneStr = `+91 ${cleanedPhone}`;
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11.0);
-      if (!dryRun) {
-        const textWidth = doc.getTextWidth(phoneStr);
-        const startX = (80 - textWidth) / 2;
-        doc.text(phoneStr, startX, y);
-        drawSlantedPhone(startX - 2.8, y - 0.8);
-      }
-      y += 5.5;
-    }
-
-    // 4. Solid horizontal line before TAX INVOICE / RECEIPT
-    y += 1.5;
-    if (!dryRun) {
-      doc.saveGraphicsState();
-      doc.setDrawColor(0, 0, 0);
-      doc.setLineWidth(0.35);
-      doc.line(leftMargin, y, 80 - leftMargin, y);
-      doc.restoreGraphicsState();
-    }
-    y += 4.5;
-
-    // 5. TAX INVOICE / RECEIPT inside rounded rectangle (Pill)
-    const headerTitle = "TAX INVOICE / RECEIPT";
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9.5);
-    const titleWidth = doc.getTextWidth(headerTitle);
-    const boxW = titleWidth + 6.0;
-    const boxH = 5.6;
-    const boxX = 40 - boxW / 2;
-    const boxY = y - 4.2;
-
-    if (!dryRun) {
-      doc.saveGraphicsState();
-      doc.setFillColor(0, 0, 0);
-      doc.roundedRect(boxX, boxY, boxW, boxH, 1.5, 1.5, "F");
-      doc.setTextColor(255, 255, 255);
-      doc.text(headerTitle, 40, y - 0.2, { align: "center" });
-      doc.restoreGraphicsState();
-    }
-    y += 3.5;
-
-    // Solid horizontal line after TAX INVOICE / RECEIPT
-    if (!dryRun) {
-      doc.saveGraphicsState();
-      doc.setDrawColor(0, 0, 0);
-      doc.setLineWidth(0.35);
-      doc.line(leftMargin, y, 80 - leftMargin, y);
-      doc.restoreGraphicsState();
-    }
-    y += 6.5; // Perfect vertical spacing before invoice section
-
-    // 6. Invoice No. & Date & Time layout (Side-by-side, perfectly matching the reference image)
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9.0);
-    doc.setTextColor(0, 0, 0);
-    if (!dryRun) {
-      doc.text("Invoice No.", leftMargin, y);
-      doc.text("Date & Time", 80 - leftMargin, y, { align: "right" });
-    }
-    y += 4.8;
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11.5);
-    doc.setTextColor(0, 0, 0);
-
-    const dateParts = receiptData.date.split(" ");
-    const dateVal = dateParts[0] || receiptData.date;
-    const timeVal = dateParts[1] || "";
-    let displayTime = "";
-    if (timeVal) {
-      displayTime = dateParts.slice(1).join(" ");
-    }
-
-    if (!dryRun) {
-      doc.text(receiptData.billNo, leftMargin, y);
-      doc.text(dateVal, 80 - leftMargin, y, { align: "right" });
-    }
-    y += 4.8;
-
-    if (displayTime) {
-      if (!dryRun) {
-        doc.text(displayTime, 80 - leftMargin, y, { align: "right" });
-      }
-      y += 4.8;
-    }
-
-    // Dashed divider before Patient section
-    y += 1.0;
-    if (!dryRun) {
-      doc.saveGraphicsState();
-      doc.setDrawColor(0, 0, 0);
-      doc.setLineWidth(0.3);
-      doc.setLineDashPattern([1.5, 1.5], 0);
-      doc.line(leftMargin, y, 80 - leftMargin, y);
-      doc.setLineDashPattern([], 0);
-      doc.restoreGraphicsState();
-    }
-    y += 6.0;
-
-    // 7. Patient Info with user avatar icon next to "BILL TO"
-    const drawUserIcon = (ux: number, uy: number) => {
-      doc.saveGraphicsState();
-      doc.setFillColor(0, 0, 0);
-      doc.circle(ux, uy - 1.5, 0.9, "F");
-      doc.ellipse(ux, uy + 0.5, 1.5, 0.9, "F");
-      doc.restoreGraphicsState();
-    };
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9.0);
-    doc.setTextColor(0, 0, 0);
-    if (!dryRun) {
-      drawUserIcon(leftMargin + 1.2, y - 0.8);
-      doc.text("BILL TO", leftMargin + 4.2, y);
-    }
-    y += 4.8;
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(15.0); // Large and bold to match reference
-    doc.setTextColor(0, 0, 0);
-    const patientLines = doc.splitTextToSize(receiptData.patient.toUpperCase(), contentWidth);
-    patientLines.forEach((line: string) => {
-      if (!dryRun) {
-        doc.text(line, leftMargin, y);
-      }
-      y += 5.2;
-    });
-
-    if (receiptData.patientMobile) {
-      const cleanedMobile = receiptData.patientMobile.replace("+91", "").trim();
-      const mobStr = `+91 ${cleanedMobile}`;
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11.0);
-      if (!dryRun) {
-        doc.text(mobStr, leftMargin, y);
-      }
-      y += 5.5;
-    }
-
-    // Dashed divider below Patient section
-    y += 1.0;
-    if (!dryRun) {
-      doc.saveGraphicsState();
-      doc.setDrawColor(0, 0, 0);
-      doc.setLineWidth(0.3);
-      doc.setLineDashPattern([1.5, 1.5], 0);
-      doc.line(leftMargin, y, 80 - leftMargin, y);
-      doc.setLineDashPattern([], 0);
-      doc.restoreGraphicsState();
-    }
-    y += 6.0;
-
-    // 8. Solid Black Table Header with Rupee Symbol support
-    const colLeftX = leftMargin + 1.5;
-    const colRightX = 80 - leftMargin - 1.5;
-
-    const drawRupeeSymbol = (d: jsPDF, rx: number, ry: number, size: number = 1.0, colorOverride?: [number, number, number]) => {
-      d.saveGraphicsState();
-      if (colorOverride) {
-        d.setDrawColor(colorOverride[0], colorOverride[1], colorOverride[2]);
-      }
-      d.setLineWidth(0.28 * size);
-      
-      // Horizontal top line
-      d.line(rx, ry - 2.1 * size, rx + 1.8 * size, ry - 2.1 * size);
-      // Horizontal mid line
-      d.line(rx, ry - 1.1 * size, rx + 1.4 * size, ry - 1.1 * size);
-      // Vertical stem
-      d.line(rx + 0.5 * size, ry - 2.1 * size, rx + 0.5 * size, ry - 1.1 * size);
-      // Curve part
-      d.line(rx + 0.5 * size, ry - 2.1 * size, rx + 1.2 * size, ry - 2.1 * size);
-      d.line(rx + 1.2 * size, ry - 2.1 * size, rx + 1.5 * size, ry - 1.7 * size);
-      d.line(rx + 1.5 * size, ry - 1.7 * size, rx + 1.5 * size, ry - 1.4 * size);
-      d.line(rx + 1.5 * size, ry - 1.4 * size, rx + 1.2 * size, ry - 1.1 * size);
-      d.line(rx + 1.2 * size, ry - 1.1 * size, rx + 0.5 * size, ry - 1.1 * size);
-      // Slanted leg
-      d.line(rx + 0.5 * size, ry - 1.1 * size, rx + 1.5 * size, ry + 0.5 * size);
-      
-      d.restoreGraphicsState();
-    };
-
-    if (!dryRun) {
-      doc.saveGraphicsState();
-      doc.setFillColor(0, 0, 0);
-      doc.rect(leftMargin, y - 4.2, 70, 5.5, "F");
-      
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(7.5);
-      doc.setTextColor(255, 255, 255);
-      doc.text("TREATMENT DETAILS", colLeftX, y - 0.5);
-      
-      const amtText = "AMOUNT (  )";
-      doc.text(amtText, colRightX, y - 0.5, { align: "right" });
-      const parenW = doc.getTextWidth(")");
-      drawRupeeSymbol(doc, colRightX - parenW - 2.1, y - 0.5, 0.72, [255, 255, 255]);
-      doc.restoreGraphicsState();
-    }
-    y += 3.5;
-
-    // 9. Render Treatments List with index boxes (01, 02) exactly like reference image
-    receiptData.items.forEach((item, idx) => {
-      const amountStr = Number(item.amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const amountWidth = doc.getTextWidth(amountStr);
-      
-      const indexBoxW = 8.0;
-      const indexBoxH = 6.0;
-      const indexBoxX = leftMargin;
-      const indexBoxY = y;
-      
-      const indexStr = String(idx + 1).padStart(2, "0");
-      
-      if (!dryRun) {
-         doc.saveGraphicsState();
-         doc.setDrawColor(0, 0, 0);
-         doc.setLineWidth(0.35);
-         doc.roundedRect(indexBoxX, indexBoxY, indexBoxW, indexBoxH, 1.2, 1.2, "S");
-         
-         doc.setFont("helvetica", "bold");
-         doc.setFontSize(9.0);
-         doc.setTextColor(0, 0, 0);
-         const indexTextW = doc.getTextWidth(indexStr);
-         doc.text(indexStr, indexBoxX + (indexBoxW - indexTextW) / 2, indexBoxY + 4.3);
-         doc.restoreGraphicsState();
-      }
-      
-      const nameStartX = leftMargin + 11.0;
-      const maxNameWidth = colRightX - nameStartX - amountWidth - 4;
-      
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11.5);
-      doc.setTextColor(0, 0, 0);
-      
-      const itemLines = doc.splitTextToSize(item.name, maxNameWidth);
-      let nameY = y + 4.3;
-      
-      itemLines.forEach((line: string, lineIdx: number) => {
-        if (!dryRun) {
-          doc.text(line, nameStartX, nameY);
-          if (lineIdx === 0) {
-            doc.text(amountStr, colRightX, nameY, { align: "right" });
-          }
-        }
-        nameY += 4.8;
-      });
-      
-      const rowHeight = Math.max(indexBoxH, (itemLines.length * 4.8) + 1.0);
-      y += rowHeight;
-      
-      if (idx < receiptData.items.length - 1) {
-        y += 2.0;
-        if (!dryRun) {
-          doc.saveGraphicsState();
-          doc.setDrawColor(0, 0, 0);
-          doc.setLineWidth(0.2);
-          doc.setLineDashPattern([1.5, 1.5], 0);
-          doc.line(leftMargin, y, 80 - leftMargin, y);
-          doc.setLineDashPattern([], 0);
-          doc.restoreGraphicsState();
-        }
-        y += 3.5;
-      } else {
-        y += 2.0;
-      }
-    });
-
-    // Single dashed separator before Grand Total
-    y += 1.0;
-    if (!dryRun) {
-      doc.saveGraphicsState();
-      doc.setDrawColor(0, 0, 0);
-      doc.setLineWidth(0.3);
-      doc.setLineDashPattern([1.5, 1.5], 0);
-      doc.line(leftMargin, y, 80 - leftMargin, y);
-      doc.setLineDashPattern([], 0);
-      doc.restoreGraphicsState();
-    }
-    y += 6.0;
-
-    // 10. GRAND TOTAL Bold Bordered Box with vertical divisor
-    const totalVal = Number(receiptData.grandTotal || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const totalBoxH = 12.0;
-    const totalBoxY = y - 4.5;
-    const textY = totalBoxY + 8.0;
-
-    if (!dryRun) {
-      doc.saveGraphicsState();
-      doc.setDrawColor(0, 0, 0);
-      doc.setLineWidth(0.55);
-      doc.rect(leftMargin, totalBoxY, 70, totalBoxH, "S");
-
-      // Vertical partition line at x=40.0
-      doc.line(40.0, totalBoxY, 40.0, totalBoxY + totalBoxH);
-
-      // Left Column: Centered "GRAND TOTAL"
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11.0);
-      doc.text("GRAND TOTAL", 22.5, textY, { align: "center" });
-
-      // Right Column: Centered "₹ 3,000.00"
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(15.0);
-      const valW = doc.getTextWidth(totalVal);
-      const rupeeW = 3.0;
-      const gap = 1.5;
-      const totalCombinedW = rupeeW + gap + valW;
-      const startX = 57.5 - totalCombinedW / 2;
-
-      // Draw Rupee Symbol
-      drawRupeeSymbol(doc, startX, textY - 0.2, 1.3, [0, 0, 0]);
-
-      // Draw value text
-      doc.text(totalVal, startX + rupeeW + gap, textY);
-
-      doc.restoreGraphicsState();
-    }
-    y += totalBoxH + 2.0;
-
-    const drawCardIcon = (cx: number, cy: number) => {
-      doc.saveGraphicsState();
-      doc.setLineWidth(0.35);
-      doc.setDrawColor(0, 0, 0);
-      doc.roundedRect(cx, cy - 1.6, 4.5, 3.2, 0.5, 0.5, "S");
-      doc.setFillColor(0, 0, 0);
-      doc.rect(cx, cy - 1.0, 4.5, 0.8, "F");
-      doc.restoreGraphicsState();
-    };
-
-    // 11. PAYMENT MODE (Perfectly aligned and styled with rounded card box)
-    const pmY = y;
-    if (!dryRun) {
-      drawCardIcon(leftMargin, pmY + 2.5);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9.5);
-      doc.text("PAYMENT MODE", leftMargin + 6.0, pmY + 3.3);
-    }
-
-    const pMethod = (receiptData.paymentMethod || "UPI").toUpperCase();
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9.5);
-    const pMethodW = doc.getTextWidth(pMethod);
-    const pmBoxW = pMethodW + 8.0;
-    const pmBoxH = 6.0;
-    const pmBoxX = 80 - leftMargin - pmBoxW;
-    const pmBoxY = pmY + 0.5;
-
-    if (!dryRun) {
-      doc.saveGraphicsState();
-      doc.setDrawColor(0, 0, 0);
-      doc.setLineWidth(0.35);
-      doc.roundedRect(pmBoxX, pmBoxY, pmBoxW, pmBoxH, 1.0, 1.0, "S");
-      doc.text(pMethod, pmBoxX + 4.0, pmY + 4.7);
-      doc.restoreGraphicsState();
-    }
-    y += pmBoxH + 5.0;
-
-    // Single solid line divider below payment mode
-    if (!dryRun) {
-      doc.saveGraphicsState();
-      doc.setDrawColor(0, 0, 0);
-      doc.setLineWidth(0.35);
-      doc.line(leftMargin, y, 80 - leftMargin, y);
-      doc.restoreGraphicsState();
-    }
-    y += 7.0;
-
-    // 12. Centered Thank you message
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10.0);
-    const thankYouMsg = "Thank You For Your Visit!";
-    if (!dryRun) {
-      const w = doc.getTextWidth(thankYouMsg);
-      doc.text(thankYouMsg, (80 - w) / 2, y);
-    }
-    y += 6.0;
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9.0);
-    const keepSmilingMsg = "Keep Smiling.";
-    if (!dryRun) {
-      const w = doc.getTextWidth(keepSmilingMsg);
-      const startX = (80 - w) / 2;
-      doc.text(keepSmilingMsg, startX, y);
-      
-      doc.saveGraphicsState();
-      doc.setLineWidth(0.25);
-      doc.setDrawColor(0, 0, 0);
-      doc.line(leftMargin + 5.0, y - 0.8, startX - 3.0, y - 0.8);
-      doc.line(startX + w + 3.0, y - 0.8, 80 - leftMargin - 5.0, y - 0.8);
-      doc.restoreGraphicsState();
-    }
-    y += 8.0;
-
-    // 13. Barcode & Invoice text below it (Centered perfectly)
-    if (!dryRun) {
-      const barcodeW = 46;
-      const barcodeH = 8;
-      const barcodeX = (80 - barcodeW) / 2;
-      drawBarcode(doc, barcodeX, y, barcodeW, barcodeH);
-    }
-    y += 11.0;
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.0);
-    if (!dryRun) {
-      const billNoW = doc.getTextWidth(receiptData.billNo);
-      doc.text(receiptData.billNo, (80 - billNoW) / 2, y);
-    }
-    y += 4.5;
-
-    // Generous bottom padding to ensure the printout fits without edge clipping
-    return y + 12;
+    const topY = ry - 2.2 * size;
+    const midY = ry - 1.2 * size;
+    const bottomY = ry + 0.4 * size;
+    
+    // Top horizontal bar
+    d.line(rx, topY, rx + 2.0 * size, topY);
+    // Middle horizontal bar
+    d.line(rx, midY, rx + 1.6 * size, midY);
+    
+    // Beautiful curve for the 'R' head on the right of the vertical stem
+    d.line(rx + 0.5 * size, topY, rx + 1.3 * size, topY);
+    d.line(rx + 1.3 * size, topY, rx + 1.7 * size, topY + 0.3 * size);
+    d.line(rx + 1.7 * size, topY + 0.3 * size, rx + 1.7 * size, midY - 0.3 * size);
+    d.line(rx + 1.7 * size, midY - 0.3 * size, rx + 1.3 * size, midY);
+    d.line(rx + 1.3 * size, midY, rx + 0.5 * size, midY);
+    
+    // Diagonal leg starting from the intersection of curve and midY, slashing down-right
+    d.line(rx + 0.5 * size, midY, rx + 1.6 * size, bottomY);
+    
+    d.restoreGraphicsState();
   };
 
   const drawBarcode = (d: jsPDF, bx: number, by: number, width: number, height: number) => {
@@ -1036,6 +577,247 @@ export function generateThermalReceiptPDF(receiptData: ReceiptData): jsPDF {
     d.restoreGraphicsState();
   };
 
+  const runLayout = (dryRun: boolean, doc: jsPDF) => {
+    let y = 10;
+    
+    // Redesigned with highly readable Helvetica
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13.0);
+    doc.setTextColor(0, 0, 0);
+
+    // 1. Centered Clinic Name (instead of TICKET)
+    const clinicLines = doc.splitTextToSize(receiptData.clinic.toUpperCase(), contentWidth);
+    clinicLines.forEach((line: string) => {
+      if (!dryRun) {
+        doc.text(line, 40, y, { align: "center" });
+      }
+      y += 4.5;
+    });
+
+    // 2. Centered Address & Phone (elegant receipt style, prevents any narrow-paper overlaps)
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.0);
+    if (receiptData.address) {
+      const addrLines = doc.splitTextToSize(receiptData.address, contentWidth);
+      addrLines.forEach((line: string) => {
+        if (!dryRun) {
+          doc.text(line, 40, y, { align: "center" });
+        }
+        y += 3.8;
+      });
+    }
+
+    if (receiptData.phone) {
+      if (!dryRun) {
+        doc.text(`Ph: ${receiptData.phone}`, 40, y, { align: "center" });
+      }
+      y += 3.8;
+    }
+
+    y += 1.5;
+
+    // 3. Dotted Divider
+    if (!dryRun) {
+      doc.saveGraphicsState();
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.4);
+      doc.setLineDashPattern([0.5, 1.2], 0);
+      doc.line(leftMargin, y, 80 - leftMargin, y);
+      doc.restoreGraphicsState();
+    }
+    y += 4.5;
+
+    // 4. Subheader Row 1: Date (Left), Invoice No (Right, no folio word, right aligned)
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    if (!dryRun) {
+      const displayDate = receiptData.date ? receiptData.date.substring(0, 16) : "";
+      doc.text(`Date: ${displayDate}`, leftMargin, y);
+    }
+    doc.setFont("helvetica", "bold");
+    if (!dryRun) {
+      doc.text(`${receiptData.billNo}`, 80 - leftMargin, y, { align: "right" });
+    }
+    y += 4.5;
+
+    // 5. Subheader Row 2: Patient Name (Left), Patient Phone (Right)
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    if (!dryRun) {
+      doc.text(`Patient: ${receiptData.patient.toUpperCase()}`, leftMargin, y);
+    }
+    if (receiptData.patientMobile) {
+      if (!dryRun) {
+        doc.text(`Ph: ${receiptData.patientMobile}`, 80 - leftMargin, y, { align: "right" });
+      }
+    }
+    y += 4.5;
+
+    // 6. Dotted Divider
+    if (!dryRun) {
+      doc.saveGraphicsState();
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.4);
+      doc.setLineDashPattern([0.5, 1.2], 0);
+      doc.line(leftMargin, y, 80 - leftMargin, y);
+      doc.restoreGraphicsState();
+    }
+    y += 4.5;
+
+    // 7. Column Headers: PROCEDURE (Left) & AMOUNT (Right)
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.0);
+    if (!dryRun) {
+      doc.text("PROCEDURE", leftMargin, y);
+      doc.text("AMOUNT", 80 - leftMargin, y, { align: "right" });
+    }
+    y += 4.0;
+
+    // 8. Dotted Divider
+    if (!dryRun) {
+      doc.saveGraphicsState();
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.4);
+      doc.setLineDashPattern([0.5, 1.2], 0);
+      doc.line(leftMargin, y, 80 - leftMargin, y);
+      doc.restoreGraphicsState();
+    }
+    y += 5.0;
+
+    // 9. Items List (Redesigned with larger 9.5 font for old people)
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.5);
+    receiptData.items.forEach((item) => {
+      const amtStr = Number(item.amount || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const amtW = doc.getTextWidth(amtStr);
+      const maxNameW = contentWidth - amtW - 3;
+      const nameLines = doc.splitTextToSize(item.name, maxNameW);
+
+      nameLines.forEach((line: string, idx: number) => {
+        if (!dryRun) {
+          doc.setFont("helvetica", "normal");
+          doc.text(line, leftMargin, y);
+          if (idx === 0) {
+            doc.setFont("helvetica", "bold");
+            doc.text(amtStr, 80 - leftMargin, y, { align: "right" });
+          }
+        }
+        y += 4.4; // Slightly more spacious line gap for legibility
+      });
+      y += 0.6; // Compact spacing between rows
+    });
+
+    // 10. Dotted Divider
+    if (!dryRun) {
+      doc.saveGraphicsState();
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.4);
+      doc.setLineDashPattern([0.5, 1.2], 0);
+      doc.line(leftMargin, y, 80 - leftMargin, y);
+      doc.restoreGraphicsState();
+    }
+    y += 5.0;
+
+    // 11. GRAND TOTAL Section
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11.0);
+    if (!dryRun) {
+      doc.text("GRAND TOTAL", leftMargin, y);
+    }
+
+    const totalValStr = Number(receiptData.grandTotal || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const totalValW = doc.getTextWidth(totalValStr);
+    const rupeeX = 80 - leftMargin - totalValW - 3.2;
+
+    if (!dryRun) {
+      drawRupeeSymbol(doc, rupeeX, y, 1.1);
+      doc.text(totalValStr, 80 - leftMargin, y, { align: "right" });
+    }
+    y += 5.0;
+
+    // 12. Dotted Divider
+    if (!dryRun) {
+      doc.saveGraphicsState();
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.4);
+      doc.setLineDashPattern([0.5, 1.2], 0);
+      doc.line(leftMargin, y, 80 - leftMargin, y);
+      doc.restoreGraphicsState();
+    }
+    y += 5.0;
+
+    // 13. Payment Mode with sharp-bordered box
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.5);
+    if (!dryRun) {
+      doc.text("Payment Mode", leftMargin, y);
+    }
+
+    const pMode = (receiptData.paymentMethod || "CASH").toUpperCase();
+    doc.setFont("helvetica", "bold");
+    const pModeW = doc.getTextWidth(pMode);
+    
+    const boxW = pModeW + 4.0;
+    const boxH = 5.2;
+    const boxX = 80 - leftMargin - boxW;
+    const boxY = y - 4.0;
+
+    if (!dryRun) {
+      doc.saveGraphicsState();
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.35);
+      doc.rect(boxX, boxY, boxW, boxH, "S");
+      doc.text(pMode, boxX + 2.0, y - 0.2);
+      doc.restoreGraphicsState();
+    }
+    y += boxH + 4.0;
+
+    // 14. Dotted Divider
+    if (!dryRun) {
+      doc.saveGraphicsState();
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.4);
+      doc.setLineDashPattern([0.5, 1.2], 0);
+      doc.line(leftMargin, y, 80 - leftMargin, y);
+      doc.restoreGraphicsState();
+    }
+    y += 6.0;
+
+    // 15. Centered Thank you footer
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.5);
+    if (!dryRun) {
+      doc.text("THANK YOU FOR YOUR VISIT!", 40, y, { align: "center" });
+    }
+    y += 4.5;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9.0);
+    if (!dryRun) {
+      doc.text("Keep smiling.", 40, y, { align: "center" });
+    }
+    y += 8.0;
+
+    // 16. Barcode representation
+    if (!dryRun) {
+      const barcodeW = 46;
+      const barcodeH = 8;
+      const barcodeX = (80 - barcodeW) / 2;
+      drawBarcode(doc, barcodeX, y, barcodeW, barcodeH);
+    }
+    y += 10.0;
+
+    // 17. Invoice serial number centered text
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.0);
+    if (!dryRun) {
+      doc.text(receiptData.billNo, 40, y, { align: "center" });
+    }
+    y += 4.5;
+
+    return y + 10;
+  };
+
   const testDoc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
@@ -1043,7 +825,7 @@ export function generateThermalReceiptPDF(receiptData: ReceiptData): jsPDF {
   });
 
   const calculatedHeight = runLayout(true, testDoc);
-  const finalHeight = Math.max(calculatedHeight, 110);
+  const finalHeight = Math.max(calculatedHeight, 105);
 
   const doc = new jsPDF({
     orientation: "portrait",
@@ -1174,23 +956,22 @@ export function generateA4InvoicePDF(receiptData: ReceiptData): jsPDF {
     
     const topY = ry - 2.8;
     const midY = ry - 1.5;
+    const bottomY = ry + 0.6;
     
     // Top horizontal bar
     doc.line(rx, topY, rx + 2.4, topY);
     // Middle horizontal bar
-    doc.line(rx, midY, rx + 2.0, midY);
-    // Vertical stem
-    doc.line(rx + 0.6, topY, rx + 0.6, midY + 1.0);
+    doc.line(rx, midY, rx + 1.9, midY);
     
     // Beautiful curved loop for the 'R' head (right of vertical stem)
     doc.line(rx + 0.6, topY, rx + 1.6, topY);
-    doc.line(rx + 1.6, topY, rx + 2.0, topY + 0.3);
-    doc.line(rx + 2.0, topY + 0.3, rx + 2.0, midY - 0.3);
-    doc.line(rx + 2.0, midY - 0.3, rx + 1.5, midY);
-    doc.line(rx + 1.5, midY, rx + 0.6, midY);
+    doc.line(rx + 1.6, topY, rx + 2.1, topY + 0.3);
+    doc.line(rx + 2.1, topY + 0.3, rx + 2.1, midY - 0.3);
+    doc.line(rx + 2.1, midY - 0.3, rx + 1.6, midY);
+    doc.line(rx + 1.6, midY, rx + 0.6, midY);
     
-    // Diagonal leg starting from vertical stem at midY + 0.5
-    doc.line(rx + 0.6, midY + 0.5, rx + 2.2, ry + 1.0);
+    // Diagonal leg starting directly from the intersection of curve and midY, slashing down-right
+    doc.line(rx + 0.6, midY, rx + 2.0, bottomY);
     
     doc.restoreGraphicsState();
   };
@@ -1221,80 +1002,119 @@ export function generateA4InvoicePDF(receiptData: ReceiptData): jsPDF {
   // Helper to draw fallback logo when no base64 logo is present
   const drawFallbackLogo = (lx: number, ly: number) => {
     doc.saveGraphicsState();
-    doc.setDrawColor(245, 158, 11); // Gold/Amber
-    doc.setFillColor(245, 158, 11);
-    doc.setLineWidth(0.4);
     
-    // Crown base
-    const cx = lx + 12;
-    const cy = ly + 4;
-    doc.line(cx - 5, cy, cx + 5, cy);
-    // Crown teeth
-    doc.line(cx - 5, cy, cx - 7, cy - 3);
-    doc.line(cx - 7, cy - 3, cx - 2, cy - 1);
-    doc.line(cx - 2, cy - 1, cx, cy - 4);
-    doc.line(cx, cy - 4, cx + 2, cy - 1);
-    doc.line(cx + 2, cy - 1, cx + 7, cy - 3);
-    doc.line(cx + 7, cy - 3, cx + 5, cy);
-    // Crown peak jewels
-    doc.circle(cx - 7, cy - 3, 0.4, "F");
-    doc.circle(cx, cy - 4, 0.4, "F");
-    doc.circle(cx + 7, cy - 3, 0.4, "F");
+    // Gold/Metallic color
+    const goldColor = [212, 175, 55] as [number, number, number];
+    const darkColor = [11, 9, 26] as [number, number, number];
+    const redColor = [239, 68, 68] as [number, number, number];
+    
+    doc.setDrawColor(goldColor[0], goldColor[1], goldColor[2]);
+    doc.setFillColor(goldColor[0], goldColor[1], goldColor[2]);
+    doc.setLineWidth(0.35);
 
-    // Golden Tooth Body
-    doc.setDrawColor(245, 158, 11);
-    doc.setFillColor(255, 255, 255);
-    doc.setLineWidth(1.0);
-    
-    // Left lobe
-    doc.ellipse(cx - 2.5, cy + 4, 3.2, 2.8, "FD");
-    // Right lobe
-    doc.ellipse(cx + 2.5, cy + 4, 3.2, 2.8, "FD");
-    // Left root
-    doc.ellipse(cx - 2.0, cy + 8, 2.0, 3.8, "FD");
-    // Right root
-    doc.ellipse(cx + 2.0, cy + 8, 2.0, 3.8, "FD");
-    
-    // Clear overlapping internal lines
-    doc.setFillColor(255, 255, 255);
-    doc.setDrawColor(255, 255, 255);
-    doc.ellipse(cx, cy + 4.5, 2.2, 2.0, "F");
-    doc.rect(cx - 3, cy + 5, 6, 4, "F");
-    
-    // Redraw subtle gold inner details
-    doc.setDrawColor(245, 158, 11);
-    doc.setLineWidth(1.0);
-    doc.line(cx - 4.0, cy + 4, cx - 4.0, cy + 8);
-    doc.line(cx + 4.0, cy + 4, cx + 4.0, cy + 8);
-    
-    // Orange Circle with White Plus
-    doc.setDrawColor(245, 158, 11);
-    doc.setFillColor(245, 158, 11);
-    doc.circle(cx + 4.5, cy + 6.5, 2.0, "FD");
-    doc.setDrawColor(255, 255, 255);
-    doc.setLineWidth(0.5);
-    doc.line(cx + 4.5, cy + 5.2, cx + 4.5, cy + 7.8);
-    doc.line(cx + 3.2, cy + 6.5, cx + 5.8, cy + 6.5);
+    const mx = (x: number) => lx + x * 0.06;
+    const my = (y: number) => ly + y * 0.06;
 
-    // Tiny yellow square with "D"
-    doc.setDrawColor(245, 158, 11);
-    doc.setFillColor(245, 158, 11);
-    doc.rect(cx + 2.5, cy + 2.5, 2.2, 2.2, "F");
+    const drawBezier = (x0: number, y0: number, x1: number, y1: number, x2: number, y2: number, x3: number, y3: number, segments: number = 10) => {
+      let prevX = mx(x0);
+      let prevY = my(y0);
+      for (let i = 1; i <= segments; i++) {
+        const t = i / segments;
+        const mt = 1 - t;
+        const w0 = mt * mt * mt;
+        const w1 = 3 * mt * mt * t;
+        const w2 = 3 * mt * t * t;
+        const w3 = t * t * t;
+        const x = mx(w0 * x0 + w1 * x1 + w2 * x2 + w3 * x3);
+        const y = my(w0 * y0 + w1 * y1 + w2 * y2 + w3 * y3);
+        doc.line(prevX, prevY, x, y);
+        prevX = x;
+        prevY = y;
+      }
+    };
+
+    // 1. Sleek crown lines (Gold)
+    doc.saveGraphicsState();
+    doc.setLineWidth(6 * 0.06);
+    doc.line(mx(137), my(112), mx(150), my(75));
+    doc.line(mx(150), my(75), mx(175), my(98));
+    doc.line(mx(175), my(98), mx(200), my(62));
+    doc.line(mx(200), my(62), mx(225), my(98));
+    doc.line(mx(225), my(98), mx(250), my(75));
+    doc.line(mx(250), my(75), mx(263), my(112));
+    doc.line(mx(263), my(112), mx(137), my(112));
+    
+    doc.setLineWidth(5 * 0.06);
+    doc.line(mx(132), my(118), mx(268), my(118));
+    doc.restoreGraphicsState();
+
+    // 2. Spherical crown tips (pearls)
+    doc.circle(mx(137), my(112), 5 * 0.06, "FD");
+    doc.circle(mx(150), my(75), 6 * 0.06, "FD");
+    doc.circle(mx(175), my(98), 5 * 0.06, "FD");
+    doc.circle(mx(200), my(62), 7.5 * 0.06, "FD");
+    doc.circle(mx(225), my(98), 5 * 0.06, "FD");
+    doc.circle(mx(250), my(75), 6 * 0.06, "FD");
+    doc.circle(mx(263), my(112), 5 * 0.06, "FD");
+
+    // 3. Sleek tooth outline (Gold)
+    doc.saveGraphicsState();
+    doc.setLineWidth(11 * 0.06);
+    drawBezier(200, 148, 160, 118, 135, 168, 135, 218);
+    drawBezier(135, 218, 135, 268, 155, 298, 175, 298);
+    drawBezier(175, 298, 185, 298, 190, 278, 200, 278);
+    drawBezier(200, 278, 210, 278, 215, 298, 225, 298);
+    drawBezier(225, 298, 245, 298, 265, 268, 265, 218);
+    drawBezier(265, 218, 265, 168, 240, 118, 200, 148);
+    doc.restoreGraphicsState();
+
+    // 4. Gold "D" inside the tooth
+    doc.saveGraphicsState();
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(4.5);
-    doc.setTextColor(255, 255, 255);
-    doc.text("D", cx + 3.6, cy + 4.2, { align: "center" });
+    doc.setFontSize(6.8);
+    doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
+    doc.text("D", mx(226), my(184));
+    doc.restoreGraphicsState();
 
-    // Branding Text below
+    // 5. Redesigned bottom-right badge element
+    doc.saveGraphicsState();
+    doc.setDrawColor(goldColor[0], goldColor[1], goldColor[2]);
+    doc.setFillColor(darkColor[0], darkColor[1], darkColor[2]);
+    doc.setLineWidth(6 * 0.06);
+    doc.circle(mx(262), my(262), 34 * 0.06, "FD");
+    doc.restoreGraphicsState();
+
+    // 6. Sleek custom red plus symbol
+    doc.saveGraphicsState();
+    doc.setDrawColor(redColor[0], redColor[1], redColor[2]);
+    doc.setLineWidth(7.5 * 0.06);
+    doc.line(mx(262), my(246), mx(262), my(278));
+    doc.line(mx(246), my(262), mx(278), my(262));
+    doc.restoreGraphicsState();
+
+    // 7. R and K in the badge
+    doc.saveGraphicsState();
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(2.3);
+    doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
+    doc.text("R", mx(248), my(251), { align: "center" });
+    doc.text("K", mx(270), my(276), { align: "center" });
+    doc.restoreGraphicsState();
+
+    // 8. Branding Text below
+    const cx = lx + 12;
+    doc.saveGraphicsState();
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8.5);
-    doc.setTextColor(245, 158, 11); // Gold/Amber
+    doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
     doc.text("RK DENTAL", cx, ly + 21, { align: "center" });
     
     doc.setFont("helvetica", "normal");
     doc.setFontSize(4.8);
     doc.setTextColor(115, 115, 115);
     doc.text("General and cosmetic dentistry", cx, ly + 24, { align: "center" });
+    doc.restoreGraphicsState();
+
     doc.restoreGraphicsState();
   };
 
@@ -1894,80 +1714,119 @@ export function generateA4PrescriptionPDF(prescription: Prescription, settings: 
   // Helper to draw fallback logo when no base64 logo is present
   const drawFallbackLogo = (lx: number, ly: number) => {
     doc.saveGraphicsState();
-    doc.setDrawColor(245, 158, 11); // Gold/Amber
-    doc.setFillColor(245, 158, 11);
-    doc.setLineWidth(0.4);
     
-    // Crown base
-    const cx = lx + 12;
-    const cy = ly + 4;
-    doc.line(cx - 5, cy, cx + 5, cy);
-    // Crown teeth
-    doc.line(cx - 5, cy, cx - 7, cy - 3);
-    doc.line(cx - 7, cy - 3, cx - 2, cy - 1);
-    doc.line(cx - 2, cy - 1, cx, cy - 4);
-    doc.line(cx, cy - 4, cx + 2, cy - 1);
-    doc.line(cx + 2, cy - 1, cx + 7, cy - 3);
-    doc.line(cx + 7, cy - 3, cx + 5, cy);
-    // Crown peak jewels
-    doc.circle(cx - 7, cy - 3, 0.4, "F");
-    doc.circle(cx, cy - 4, 0.4, "F");
-    doc.circle(cx + 7, cy - 3, 0.4, "F");
+    // Gold/Metallic color
+    const goldColor = [212, 175, 55] as [number, number, number];
+    const darkColor = [11, 9, 26] as [number, number, number];
+    const redColor = [239, 68, 68] as [number, number, number];
+    
+    doc.setDrawColor(goldColor[0], goldColor[1], goldColor[2]);
+    doc.setFillColor(goldColor[0], goldColor[1], goldColor[2]);
+    doc.setLineWidth(0.35);
 
-    // Golden Tooth Body
-    doc.setDrawColor(245, 158, 11);
-    doc.setFillColor(255, 255, 255);
-    doc.setLineWidth(1.0);
-    
-    // Left lobe
-    doc.ellipse(cx - 2.5, cy + 4, 3.2, 2.8, "FD");
-    // Right lobe
-    doc.ellipse(cx + 2.5, cy + 4, 3.2, 2.8, "FD");
-    // Left root
-    doc.ellipse(cx - 2.0, cy + 8, 2.0, 3.8, "FD");
-    // Right root
-    doc.ellipse(cx + 2.0, cy + 8, 2.0, 3.8, "FD");
-    
-    // Clear overlapping internal lines
-    doc.setFillColor(255, 255, 255);
-    doc.setDrawColor(255, 255, 255);
-    doc.ellipse(cx, cy + 4.5, 2.2, 2.0, "F");
-    doc.rect(cx - 3, cy + 5, 6, 4, "F");
-    
-    // Redraw subtle gold inner details
-    doc.setDrawColor(245, 158, 11);
-    doc.setLineWidth(1.0);
-    doc.line(cx - 4.0, cy + 4, cx - 4.0, cy + 8);
-    doc.line(cx + 4.0, cy + 4, cx + 4.0, cy + 8);
-    
-    // Orange Circle with White Plus
-    doc.setDrawColor(245, 158, 11);
-    doc.setFillColor(245, 158, 11);
-    doc.circle(cx + 4.5, cy + 6.5, 2.0, "FD");
-    doc.setDrawColor(255, 255, 255);
-    doc.setLineWidth(0.5);
-    doc.line(cx + 4.5, cy + 5.2, cx + 4.5, cy + 7.8);
-    doc.line(cx + 3.2, cy + 6.5, cx + 5.8, cy + 6.5);
+    const mx = (x: number) => lx + x * 0.06;
+    const my = (y: number) => ly + y * 0.06;
 
-    // Tiny yellow square with "D"
-    doc.setDrawColor(245, 158, 11);
-    doc.setFillColor(245, 158, 11);
-    doc.rect(cx + 2.5, cy + 2.5, 2.2, 2.2, "F");
+    const drawBezier = (x0: number, y0: number, x1: number, y1: number, x2: number, y2: number, x3: number, y3: number, segments: number = 10) => {
+      let prevX = mx(x0);
+      let prevY = my(y0);
+      for (let i = 1; i <= segments; i++) {
+        const t = i / segments;
+        const mt = 1 - t;
+        const w0 = mt * mt * mt;
+        const w1 = 3 * mt * mt * t;
+        const w2 = 3 * mt * t * t;
+        const w3 = t * t * t;
+        const x = mx(w0 * x0 + w1 * x1 + w2 * x2 + w3 * x3);
+        const y = my(w0 * y0 + w1 * y1 + w2 * y2 + w3 * y3);
+        doc.line(prevX, prevY, x, y);
+        prevX = x;
+        prevY = y;
+      }
+    };
+
+    // 1. Sleek crown lines (Gold)
+    doc.saveGraphicsState();
+    doc.setLineWidth(6 * 0.06);
+    doc.line(mx(137), my(112), mx(150), my(75));
+    doc.line(mx(150), my(75), mx(175), my(98));
+    doc.line(mx(175), my(98), mx(200), my(62));
+    doc.line(mx(200), my(62), mx(225), my(98));
+    doc.line(mx(225), my(98), mx(250), my(75));
+    doc.line(mx(250), my(75), mx(263), my(112));
+    doc.line(mx(263), my(112), mx(137), my(112));
+    
+    doc.setLineWidth(5 * 0.06);
+    doc.line(mx(132), my(118), mx(268), my(118));
+    doc.restoreGraphicsState();
+
+    // 2. Spherical crown tips (pearls)
+    doc.circle(mx(137), my(112), 5 * 0.06, "FD");
+    doc.circle(mx(150), my(75), 6 * 0.06, "FD");
+    doc.circle(mx(175), my(98), 5 * 0.06, "FD");
+    doc.circle(mx(200), my(62), 7.5 * 0.06, "FD");
+    doc.circle(mx(225), my(98), 5 * 0.06, "FD");
+    doc.circle(mx(250), my(75), 6 * 0.06, "FD");
+    doc.circle(mx(263), my(112), 5 * 0.06, "FD");
+
+    // 3. Sleek tooth outline (Gold)
+    doc.saveGraphicsState();
+    doc.setLineWidth(11 * 0.06);
+    drawBezier(200, 148, 160, 118, 135, 168, 135, 218);
+    drawBezier(135, 218, 135, 268, 155, 298, 175, 298);
+    drawBezier(175, 298, 185, 298, 190, 278, 200, 278);
+    drawBezier(200, 278, 210, 278, 215, 298, 225, 298);
+    drawBezier(225, 298, 245, 298, 265, 268, 265, 218);
+    drawBezier(265, 218, 265, 168, 240, 118, 200, 148);
+    doc.restoreGraphicsState();
+
+    // 4. Gold "D" inside the tooth
+    doc.saveGraphicsState();
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(4.5);
-    doc.setTextColor(255, 255, 255);
-    doc.text("D", cx + 3.6, cy + 4.2, { align: "center" });
+    doc.setFontSize(6.8);
+    doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
+    doc.text("D", mx(226), my(184));
+    doc.restoreGraphicsState();
 
-    // Branding Text below
+    // 5. Redesigned bottom-right badge element
+    doc.saveGraphicsState();
+    doc.setDrawColor(goldColor[0], goldColor[1], goldColor[2]);
+    doc.setFillColor(darkColor[0], darkColor[1], darkColor[2]);
+    doc.setLineWidth(6 * 0.06);
+    doc.circle(mx(262), my(262), 34 * 0.06, "FD");
+    doc.restoreGraphicsState();
+
+    // 6. Sleek custom red plus symbol
+    doc.saveGraphicsState();
+    doc.setDrawColor(redColor[0], redColor[1], redColor[2]);
+    doc.setLineWidth(7.5 * 0.06);
+    doc.line(mx(262), my(246), mx(262), my(278));
+    doc.line(mx(246), my(262), mx(278), my(262));
+    doc.restoreGraphicsState();
+
+    // 7. R and K in the badge
+    doc.saveGraphicsState();
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(2.3);
+    doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
+    doc.text("R", mx(248), my(251), { align: "center" });
+    doc.text("K", mx(270), my(276), { align: "center" });
+    doc.restoreGraphicsState();
+
+    // 8. Branding Text below
+    const cx = lx + 12;
+    doc.saveGraphicsState();
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8.5);
-    doc.setTextColor(245, 158, 11); // Gold/Amber
+    doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
     doc.text("RK DENTAL", cx, ly + 21, { align: "center" });
     
     doc.setFont("helvetica", "normal");
     doc.setFontSize(4.8);
     doc.setTextColor(115, 115, 115);
     doc.text("General and cosmetic dentistry", cx, ly + 24, { align: "center" });
+    doc.restoreGraphicsState();
+
     doc.restoreGraphicsState();
   };
 
@@ -2203,9 +2062,9 @@ export function generateA4PrescriptionPDF(prescription: Prescription, settings: 
   const xColSNo = leftMargin + 4; // center aligned
   const xColMed = leftMargin + 10; // left aligned
   const xColDosage = leftMargin + 72; // left aligned
-  const xColFreq = leftMargin + 98; // center aligned
-  const xColDur = leftMargin + 124; // center aligned
-  const xColInst = leftMargin + 140; // left aligned
+  const xColFreq = leftMargin + 105; // center aligned (shifted from 98 to 105 to give dosage 33mm space instead of 26mm)
+  const xColDur = leftMargin + 127; // center aligned (shifted from 124 to 127 to give frequency 22mm space)
+  const xColInst = leftMargin + 143; // left aligned (shifted from 140 to 143 to give duration 16mm space and instruction 27mm space)
 
   doc.text("#", xColSNo, y + 6.3, { align: "center" });
   doc.text("MEDICINE / DRUG NAME", xColMed, y + 6.3);
@@ -2225,9 +2084,12 @@ export function generateA4PrescriptionPDF(prescription: Prescription, settings: 
     const medLines: string[] = doc.splitTextToSize(med.name || "N/A", 58);
     
     doc.setFont("helvetica", "normal");
-    const instLines: string[] = doc.splitTextToSize(med.instructions || "None", 26);
+    const dosageLines: string[] = doc.splitTextToSize(med.dosage || "N/A", 30);
+    const freqLines: string[] = doc.splitTextToSize(med.frequency || "N/A", 20);
+    const durLines: string[] = doc.splitTextToSize(med.duration || "N/A", 18);
+    const instLines: string[] = doc.splitTextToSize(med.instructions || "None", 25);
     
-    const lineCount = Math.max(medLines.length, instLines.length, 1);
+    const lineCount = Math.max(medLines.length, dosageLines.length, freqLines.length, durLines.length, instLines.length, 1);
     const rowHeight = 6.0 + (lineCount * 4.2);
 
     // Zebra striping
@@ -2257,13 +2119,19 @@ export function generateA4PrescriptionPDF(prescription: Prescription, settings: 
     // Render Dosage
     doc.setFont("helvetica", "normal");
     doc.setTextColor(51, 65, 85); // slate-700
-    doc.text(med.dosage || "N/A", xColDosage, y + 5.5);
+    dosageLines.forEach((line, i) => {
+      doc.text(line, xColDosage, y + 5.5 + (i * 4.2));
+    });
 
     // Render Frequency
-    doc.text(med.frequency || "N/A", xColFreq, y + 5.5, { align: "center" });
+    freqLines.forEach((line, i) => {
+      doc.text(line, xColFreq, y + 5.5 + (i * 4.2), { align: "center" });
+    });
 
     // Render Duration
-    doc.text(med.duration || "N/A", xColDur, y + 5.5, { align: "center" });
+    durLines.forEach((line, i) => {
+      doc.text(line, xColDur, y + 5.5 + (i * 4.2), { align: "center" });
+    });
 
     // Render Instructions
     instLines.forEach((line, i) => {
