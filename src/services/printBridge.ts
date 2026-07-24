@@ -2,6 +2,59 @@ import { getPrintBridgeSettings } from "./printBridgeConfig";
 import { Bill, ClinicSettings, Prescription } from "../types";
 import jsPDF from "jspdf";
 import { ROBOTO_REGULAR_BASE64, ROBOTO_BOLD_BASE64 } from "./robotoBase64";
+import { supabase } from "../supabaseClient";
+
+/**
+ * Dynamically fetches the latest saved clinic settings from the Supabase database
+ * or falls back to localStorage/provided fallback object if offline.
+ */
+export async function getLatestSettings(fallbackSettings?: ClinicSettings): Promise<ClinicSettings> {
+  try {
+    const { data, error } = await supabase
+      .from("settings")
+      .select("*")
+      .eq("id", "config")
+      .single();
+
+    if (!error && data) {
+      const extraJson = localStorage.getItem("rk_bill_desk_extra_settings");
+      let extra = {};
+      if (extraJson) {
+        try { extra = JSON.parse(extraJson); } catch (e) {}
+      }
+      return { ...data, ...extra };
+    }
+  } catch (err) {
+    console.warn("[printBridge] Failed to fetch latest settings from database, using local fallback:", err);
+  }
+
+  // Fallback to local storage or provided fallback
+  const extraJson = localStorage.getItem("rk_bill_desk_extra_settings");
+  let extra = {};
+  if (extraJson) {
+    try { extra = JSON.parse(extraJson); } catch (e) {}
+  }
+
+  const fallbackStr = localStorage.getItem("rk_fallback_settings");
+  let offlineSettings = null;
+  if (fallbackStr) {
+    try {
+      const arr = JSON.parse(fallbackStr);
+      offlineSettings = Array.isArray(arr) ? arr[0] : arr;
+    } catch (e) {}
+  }
+
+  const defaultSettings: ClinicSettings = {
+    id: "config",
+    clinic_name: "RK Dental Clinic",
+    address: "123 Dental Street, Suite A, iPadOS Cloud Office",
+    phone: "+91 98765 43210",
+    receipt_footer: "Thank you for your visit! Keep smiling.",
+    whatsapp_message_template: ""
+  };
+
+  return { ...(offlineSettings || fallbackSettings || defaultSettings), ...extra };
+}
 
 export interface ReceiptData {
   clinic: string;
@@ -999,181 +1052,52 @@ export function generateA4InvoicePDF(receiptData: ReceiptData): jsPDF {
     doc.restoreGraphicsState();
   };
 
-  // Helper to draw fallback logo when no base64 logo is present
-  const drawFallbackLogo = (lx: number, ly: number) => {
-    doc.saveGraphicsState();
-    
-    // Gold/Metallic color
-    const goldColor = [212, 175, 55] as [number, number, number];
-    const darkColor = [11, 9, 26] as [number, number, number];
-    const redColor = [239, 68, 68] as [number, number, number];
-    
-    doc.setDrawColor(goldColor[0], goldColor[1], goldColor[2]);
-    doc.setFillColor(goldColor[0], goldColor[1], goldColor[2]);
-    doc.setLineWidth(0.35);
+  // --- HEADER SECTION (Clean, professional text-only header layout) ---
+  let textStartX = leftMargin; // 20mm, full width alignment starting at left margin
 
-    const mx = (x: number) => lx + x * 0.06;
-    const my = (y: number) => ly + y * 0.06;
-
-    const drawBezier = (x0: number, y0: number, x1: number, y1: number, x2: number, y2: number, x3: number, y3: number, segments: number = 10) => {
-      let prevX = mx(x0);
-      let prevY = my(y0);
-      for (let i = 1; i <= segments; i++) {
-        const t = i / segments;
-        const mt = 1 - t;
-        const w0 = mt * mt * mt;
-        const w1 = 3 * mt * mt * t;
-        const w2 = 3 * mt * t * t;
-        const w3 = t * t * t;
-        const x = mx(w0 * x0 + w1 * x1 + w2 * x2 + w3 * x3);
-        const y = my(w0 * y0 + w1 * y1 + w2 * y2 + w3 * y3);
-        doc.line(prevX, prevY, x, y);
-        prevX = x;
-        prevY = y;
-      }
-    };
-
-    // 1. Sleek crown lines (Gold)
-    doc.saveGraphicsState();
-    doc.setLineWidth(6 * 0.06);
-    doc.line(mx(137), my(112), mx(150), my(75));
-    doc.line(mx(150), my(75), mx(175), my(98));
-    doc.line(mx(175), my(98), mx(200), my(62));
-    doc.line(mx(200), my(62), mx(225), my(98));
-    doc.line(mx(225), my(98), mx(250), my(75));
-    doc.line(mx(250), my(75), mx(263), my(112));
-    doc.line(mx(263), my(112), mx(137), my(112));
-    
-    doc.setLineWidth(5 * 0.06);
-    doc.line(mx(132), my(118), mx(268), my(118));
-    doc.restoreGraphicsState();
-
-    // 2. Spherical crown tips (pearls)
-    doc.circle(mx(137), my(112), 5 * 0.06, "FD");
-    doc.circle(mx(150), my(75), 6 * 0.06, "FD");
-    doc.circle(mx(175), my(98), 5 * 0.06, "FD");
-    doc.circle(mx(200), my(62), 7.5 * 0.06, "FD");
-    doc.circle(mx(225), my(98), 5 * 0.06, "FD");
-    doc.circle(mx(250), my(75), 6 * 0.06, "FD");
-    doc.circle(mx(263), my(112), 5 * 0.06, "FD");
-
-    // 3. Sleek tooth outline (Gold)
-    doc.saveGraphicsState();
-    doc.setLineWidth(11 * 0.06);
-    drawBezier(200, 148, 160, 118, 135, 168, 135, 218);
-    drawBezier(135, 218, 135, 268, 155, 298, 175, 298);
-    drawBezier(175, 298, 185, 298, 190, 278, 200, 278);
-    drawBezier(200, 278, 210, 278, 215, 298, 225, 298);
-    drawBezier(225, 298, 245, 298, 265, 268, 265, 218);
-    drawBezier(265, 218, 265, 168, 240, 118, 200, 148);
-    doc.restoreGraphicsState();
-
-    // 4. Gold "D" inside the tooth
-    doc.saveGraphicsState();
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.8);
-    doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
-    doc.text("D", mx(226), my(184));
-    doc.restoreGraphicsState();
-
-    // 5. Redesigned bottom-right badge element
-    doc.saveGraphicsState();
-    doc.setDrawColor(goldColor[0], goldColor[1], goldColor[2]);
-    doc.setFillColor(darkColor[0], darkColor[1], darkColor[2]);
-    doc.setLineWidth(6 * 0.06);
-    doc.circle(mx(262), my(262), 34 * 0.06, "FD");
-    doc.restoreGraphicsState();
-
-    // 6. Sleek custom red plus symbol
-    doc.saveGraphicsState();
-    doc.setDrawColor(redColor[0], redColor[1], redColor[2]);
-    doc.setLineWidth(7.5 * 0.06);
-    doc.line(mx(262), my(246), mx(262), my(278));
-    doc.line(mx(246), my(262), mx(278), my(262));
-    doc.restoreGraphicsState();
-
-    // 7. R and K in the badge
-    doc.saveGraphicsState();
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(2.3);
-    doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
-    doc.text("R", mx(248), my(251), { align: "center" });
-    doc.text("K", mx(270), my(276), { align: "center" });
-    doc.restoreGraphicsState();
-
-    // 8. Branding Text below
-    const cx = lx + 12;
-    doc.saveGraphicsState();
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
-    doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
-    doc.text("RK DENTAL", cx, ly + 21, { align: "center" });
-    
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(4.8);
-    doc.setTextColor(115, 115, 115);
-    doc.text("General and cosmetic dentistry", cx, ly + 24, { align: "center" });
-    doc.restoreGraphicsState();
-
-    doc.restoreGraphicsState();
-  };
-
-  // --- HEADER SECTION ---
-  let textStartX = leftMargin + 28;
-
-  if (receiptData.logoBase64) {
-    try {
-      doc.addImage(receiptData.logoBase64, "PNG", leftMargin, y, 24, 24);
-    } catch (e) {
-      console.error("Failed to render clinic logo in A4 Invoice, falling back to vector logo:", e);
-      drawFallbackLogo(leftMargin, y);
-    }
-  } else {
-    drawFallbackLogo(leftMargin, y);
-  }
-
-  // Clinic Details (Left aligned next to logo)
+  // Clinic Name (Prominent clean typography)
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
+  doc.setFontSize(20);
   doc.setTextColor(107, 33, 168); // Violet-700
-  doc.text(receiptData.clinic.toUpperCase(), textStartX, y + 4);
+  const clinicTitle = (receiptData.clinic || "RK DENTAL CLINIC").toUpperCase();
+  doc.text(clinicTitle, textStartX, y + 4);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
   doc.setTextColor(100, 116, 139); // Slate-500
-  doc.text("General and Cosmetic Dentistry", textStartX, y + 8);
+  doc.text("General and Cosmetic Dentistry", textStartX, y + 9);
 
-  let currentY = y + 13;
-  doc.setFontSize(8);
-  doc.setTextColor(71, 85, 105); // Slate-600
+  let currentY = y + 14;
+  doc.setFontSize(7.8);
+  doc.setTextColor(51, 65, 85); // Slate-700
 
-  // Render Address dynamic lines with tiny location pin
+  // Render Address dynamic lines with location pin
   if (receiptData.address) {
-    const addrLines = doc.splitTextToSize(receiptData.address, 75);
+    const addrLines = doc.splitTextToSize(receiptData.address, 85);
     addrLines.forEach((line: string, index: number) => {
       if (index === 0) {
-        drawLocationPin(textStartX + 1, currentY - 1);
+        drawLocationPin(textStartX + 1.2, currentY - 0.2);
       }
-      doc.text(line, textStartX + 4, currentY);
-      currentY += 4;
+      doc.text(line, textStartX + 4.5, currentY);
+      currentY += 4.2;
     });
   }
 
   // Phone bullet
   if (receiptData.phone) {
-    drawPhoneIcon(textStartX + 1, currentY - 1);
-    doc.text(receiptData.phone, textStartX + 4, currentY);
-    currentY += 4;
+    drawPhoneIcon(textStartX + 1.2, currentY - 0.2);
+    doc.text(receiptData.phone, textStartX + 4.5, currentY);
+    currentY += 4.2;
   }
 
   // Email bullet
-  drawEnvelopeIcon(textStartX + 1, currentY - 1);
-  doc.text("contact@rkdental.com", textStartX + 4, currentY);
-  currentY += 4;
+  drawEnvelopeIcon(textStartX + 1.2, currentY - 0.2);
+  doc.text("contact@rkdental.com", textStartX + 4.5, currentY);
+  currentY += 4.2;
 
   // Website bullet
-  drawGlobeIcon(textStartX + 1, currentY - 1);
-  doc.text("www.rkdentalclinic.com", textStartX + 4, currentY);
+  drawGlobeIcon(textStartX + 1.2, currentY - 0.2);
+  doc.text("www.rkdentalclinic.com", textStartX + 4.5, currentY);
 
   // Invoice Title (Right aligned)
   doc.setFont("helvetica", "bold");
@@ -1711,169 +1635,51 @@ export function generateA4PrescriptionPDF(prescription: Prescription, settings: 
     doc.restoreGraphicsState();
   };
 
-  // Helper to draw fallback logo when no base64 logo is present
-  const drawFallbackLogo = (lx: number, ly: number) => {
-    doc.saveGraphicsState();
-    
-    // Gold/Metallic color
-    const goldColor = [212, 175, 55] as [number, number, number];
-    const darkColor = [11, 9, 26] as [number, number, number];
-    const redColor = [239, 68, 68] as [number, number, number];
-    
-    doc.setDrawColor(goldColor[0], goldColor[1], goldColor[2]);
-    doc.setFillColor(goldColor[0], goldColor[1], goldColor[2]);
-    doc.setLineWidth(0.35);
+  // --- HEADER SECTION (Clean, professional text-only header layout) ---
+  let textStartX = leftMargin; // 20mm, full width alignment starting at left margin
 
-    const mx = (x: number) => lx + x * 0.06;
-    const my = (y: number) => ly + y * 0.06;
-
-    const drawBezier = (x0: number, y0: number, x1: number, y1: number, x2: number, y2: number, x3: number, y3: number, segments: number = 10) => {
-      let prevX = mx(x0);
-      let prevY = my(y0);
-      for (let i = 1; i <= segments; i++) {
-        const t = i / segments;
-        const mt = 1 - t;
-        const w0 = mt * mt * mt;
-        const w1 = 3 * mt * mt * t;
-        const w2 = 3 * mt * t * t;
-        const w3 = t * t * t;
-        const x = mx(w0 * x0 + w1 * x1 + w2 * x2 + w3 * x3);
-        const y = my(w0 * y0 + w1 * y1 + w2 * y2 + w3 * y3);
-        doc.line(prevX, prevY, x, y);
-        prevX = x;
-        prevY = y;
-      }
-    };
-
-    // 1. Sleek crown lines (Gold)
-    doc.saveGraphicsState();
-    doc.setLineWidth(6 * 0.06);
-    doc.line(mx(137), my(112), mx(150), my(75));
-    doc.line(mx(150), my(75), mx(175), my(98));
-    doc.line(mx(175), my(98), mx(200), my(62));
-    doc.line(mx(200), my(62), mx(225), my(98));
-    doc.line(mx(225), my(98), mx(250), my(75));
-    doc.line(mx(250), my(75), mx(263), my(112));
-    doc.line(mx(263), my(112), mx(137), my(112));
-    
-    doc.setLineWidth(5 * 0.06);
-    doc.line(mx(132), my(118), mx(268), my(118));
-    doc.restoreGraphicsState();
-
-    // 2. Spherical crown tips (pearls)
-    doc.circle(mx(137), my(112), 5 * 0.06, "FD");
-    doc.circle(mx(150), my(75), 6 * 0.06, "FD");
-    doc.circle(mx(175), my(98), 5 * 0.06, "FD");
-    doc.circle(mx(200), my(62), 7.5 * 0.06, "FD");
-    doc.circle(mx(225), my(98), 5 * 0.06, "FD");
-    doc.circle(mx(250), my(75), 6 * 0.06, "FD");
-    doc.circle(mx(263), my(112), 5 * 0.06, "FD");
-
-    // 3. Sleek tooth outline (Gold)
-    doc.saveGraphicsState();
-    doc.setLineWidth(11 * 0.06);
-    drawBezier(200, 148, 160, 118, 135, 168, 135, 218);
-    drawBezier(135, 218, 135, 268, 155, 298, 175, 298);
-    drawBezier(175, 298, 185, 298, 190, 278, 200, 278);
-    drawBezier(200, 278, 210, 278, 215, 298, 225, 298);
-    drawBezier(225, 298, 245, 298, 265, 268, 265, 218);
-    drawBezier(265, 218, 265, 168, 240, 118, 200, 148);
-    doc.restoreGraphicsState();
-
-    // 4. Gold "D" inside the tooth
-    doc.saveGraphicsState();
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.8);
-    doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
-    doc.text("D", mx(226), my(184));
-    doc.restoreGraphicsState();
-
-    // 5. Redesigned bottom-right badge element
-    doc.saveGraphicsState();
-    doc.setDrawColor(goldColor[0], goldColor[1], goldColor[2]);
-    doc.setFillColor(darkColor[0], darkColor[1], darkColor[2]);
-    doc.setLineWidth(6 * 0.06);
-    doc.circle(mx(262), my(262), 34 * 0.06, "FD");
-    doc.restoreGraphicsState();
-
-    // 6. Sleek custom red plus symbol
-    doc.saveGraphicsState();
-    doc.setDrawColor(redColor[0], redColor[1], redColor[2]);
-    doc.setLineWidth(7.5 * 0.06);
-    doc.line(mx(262), my(246), mx(262), my(278));
-    doc.line(mx(246), my(262), mx(278), my(262));
-    doc.restoreGraphicsState();
-
-    // 7. R and K in the badge
-    doc.saveGraphicsState();
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(2.3);
-    doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
-    doc.text("R", mx(248), my(251), { align: "center" });
-    doc.text("K", mx(270), my(276), { align: "center" });
-    doc.restoreGraphicsState();
-
-    // 8. Branding Text below
-    const cx = lx + 12;
-    doc.saveGraphicsState();
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
-    doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
-    doc.text("RK DENTAL", cx, ly + 21, { align: "center" });
-    
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(4.8);
-    doc.setTextColor(115, 115, 115);
-    doc.text("General and cosmetic dentistry", cx, ly + 24, { align: "center" });
-    doc.restoreGraphicsState();
-
-    doc.restoreGraphicsState();
-  };
-
-  // --- HEADER SECTION ---
-  let textStartX = leftMargin + 28;
-
-  if (settings.clinic_logo_base64) {
-    try {
-      doc.addImage(settings.clinic_logo_base64, "PNG", leftMargin, y, 24, 24);
-    } catch (e) {
-      console.error("Failed to render clinic logo in A4 Prescription, falling back to vector logo:", e);
-      drawFallbackLogo(leftMargin, y);
-    }
-  } else {
-    drawFallbackLogo(leftMargin, y);
-  }
-
-  // Clinic Details (Left aligned next to logo)
+  // Clinic Details (Prominent clean typography from dynamic settings)
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
+  doc.setFontSize(20);
   doc.setTextColor(107, 33, 168); // Violet-700
-  doc.text("RK DENTAL CLINIC", textStartX, y + 4);
+  const clinicTitle = (settings.clinic_name || "RK DENTAL CLINIC").toUpperCase();
+  doc.text(clinicTitle, textStartX, y + 4);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
   doc.setTextColor(100, 116, 139); // Slate-500
-  doc.text("General and Cosmetic Dentistry", textStartX, y + 8);
+  doc.text("General and Cosmetic Dentistry", textStartX, y + 9);
 
-  // Elegant Vector Icons with precise details below Clinic Name
-  let currentY = y + 13.5;
+  // Elegant Vector Icons with dynamic details below Clinic Name
+  let currentY = y + 14;
   doc.setFontSize(7.8);
   doc.setTextColor(51, 65, 85); // Slate-700
 
-  drawLocationPin(textStartX + 1.2, currentY - 0.2);
-  doc.text("123 Dental Street, Suite A, iPadOS Cloud Office", textStartX + 4, currentY);
+  // Dynamic Address
+  const clinicAddr = settings.address || "123 Dental Street, Suite A";
+  const addrLines = doc.splitTextToSize(clinicAddr, 85);
+  addrLines.forEach((line: string, index: number) => {
+    if (index === 0) {
+      drawLocationPin(textStartX + 1.2, currentY - 0.2);
+    }
+    doc.text(line, textStartX + 4.5, currentY);
+    currentY += 4.2;
+  });
 
-  currentY += 4.5;
+  // Dynamic Phone
+  const clinicPhone = settings.phone || "+91 98765 43210";
   drawPhoneIcon(textStartX + 1.2, currentY - 0.2);
-  doc.text("+91 98765 43210", textStartX + 4, currentY);
+  doc.text(clinicPhone, textStartX + 4.5, currentY);
+  currentY += 4.2;
 
-  currentY += 4.5;
+  // Email
   drawEnvelopeIcon(textStartX + 1.2, currentY - 0.2);
-  doc.text("contact@rkdental.com", textStartX + 4, currentY);
+  doc.text("contact@rkdental.com", textStartX + 4.5, currentY);
+  currentY += 4.2;
 
-  currentY += 4.5;
+  // Website
   drawGlobeIcon(textStartX + 1.2, currentY - 0.2);
-  doc.text("www.rkdentalclinic.com", textStartX + 4, currentY);
+  doc.text("www.rkdentalclinic.com", textStartX + 4.5, currentY);
 
   // Prescription Title (Right aligned)
   doc.setFont("helvetica", "bold");

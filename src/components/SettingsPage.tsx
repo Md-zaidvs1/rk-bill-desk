@@ -226,7 +226,7 @@ export default function SettingsPage({ settings, user, onSettingsUpdate, onUserU
         }
       }
 
-      // Save custom extra settings to localStorage as a robust dual-save
+      // Save custom extra settings and full fallback to localStorage as a robust dual-save
       const extraSettings = {
         bill_header_logo_type: billLogoType,
         clinic_logo_base64: clinicLogoBase64,
@@ -238,6 +238,7 @@ export default function SettingsPage({ settings, user, onSettingsUpdate, onUserU
       // If direct single row was returned, pass it, otherwise fallback to values
       const dbRecord = (saveResult.data && saveResult.data.length > 0) ? saveResult.data[0] : { id: targetId, ...fullValues };
       const updatedRecord = { ...dbRecord, ...extraSettings };
+      localStorage.setItem("rk_fallback_settings", JSON.stringify(updatedRecord));
       onSettingsUpdate(updatedRecord);
     } catch (err: any) {
       setSettingsError(err.message || "Failed to save profile settings to cloud database.");

@@ -7,7 +7,7 @@ import {
 import { Bill, BillItem, ClinicSettings, Medicine, Prescription } from "../types";
 import { supabase } from "../supabaseClient";
 import jsPDF from "jspdf";
-import { printBridge, generateThermalPDF, generateThermalReceiptPDF, generateA4InvoicePDF, triggerThermalBillPrint, generateA4PrescriptionPDF } from "../services/printBridge";
+import { printBridge, generateThermalPDF, generateThermalReceiptPDF, generateA4InvoicePDF, triggerThermalBillPrint, generateA4PrescriptionPDF, getLatestSettings } from "../services/printBridge";
 
 interface TreatmentDeskProps {
   settings: ClinicSettings;
@@ -366,18 +366,20 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
   };
 
   // --- Export PDF Handlers ---
-  const handleDownloadPrescriptionPDF = (pres: Prescription) => {
+  const handleDownloadPrescriptionPDF = async (pres: Prescription) => {
     try {
-      const doc = generateA4PrescriptionPDF(pres, settings);
+      const activeSettings = await getLatestSettings(settings);
+      const doc = generateA4PrescriptionPDF(pres, activeSettings);
       doc.save(`Prescription_${pres.patient_name.replace(/\s+/g, "_")}_${pres.date}.pdf`);
     } catch (err) {
       console.error("PDF generation failed:", err);
     }
   };
 
-  const handleDownloadInvoicePDF = (bill: Bill) => {
+  const handleDownloadInvoicePDF = async (bill: Bill) => {
     try {
-      const receiptData = printBridge.getBillReceiptData(bill, settings);
+      const activeSettings = await getLatestSettings(settings);
+      const receiptData = printBridge.getBillReceiptData(bill, activeSettings);
       const doc = generateA4InvoicePDF(receiptData);
       doc.save(`Invoice_${bill.patient_name.replace(/\s+/g, "_")}_${bill.bill_number}.pdf`);
     } catch (err) {
@@ -387,6 +389,7 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
 
   const handleSendBillPDF = async (bill: Bill) => {
     try {
+      const activeSettings = await getLatestSettings(settings);
       const rawMobile = bill?.patient_mobile || patientMobile || "";
       let cleanMobile = rawMobile.replace(/\D/g, "");
       if (cleanMobile.startsWith("0")) {
@@ -404,7 +407,7 @@ export default function TreatmentDesk({ settings, activePatient, onActivePatient
       }
 
       // 1. Generate Invoice PDF
-      const receiptData = printBridge.getBillReceiptData(bill, settings);
+      const receiptData = printBridge.getBillReceiptData(bill, activeSettings);
       const docBill = generateA4InvoicePDF(receiptData);
       const fileName = `Invoice_${bill.patient_name.replace(/\s+/g, "_")}_${bill.bill_number}.pdf`;
       const pdfBlob = docBill.output("blob");

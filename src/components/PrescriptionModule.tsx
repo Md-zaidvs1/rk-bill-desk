@@ -3,7 +3,7 @@ import { Plus, Trash2, Printer, Download, Share2, Save, FileText, Search, PlusCi
 import { Prescription, Medicine, ClinicSettings } from "../types";
 import jsPDF from "jspdf";
 import { supabase } from "../supabaseClient";
-import { printBridge, generateThermalPDF, generateA4PrescriptionPDF } from "../services/printBridge";
+import { printBridge, generateThermalPDF, generateA4PrescriptionPDF, getLatestSettings } from "../services/printBridge";
 
 interface PrescriptionModuleProps {
   settings: ClinicSettings;
@@ -297,9 +297,10 @@ export default function PrescriptionModule({ settings, initialTab = "create", ac
   };
 
   // Generate and download formal A4 PDF
-  const handleDownloadPDF = (pres: Prescription) => {
+  const handleDownloadPDF = async (pres: Prescription) => {
     try {
-      const doc = generateA4PrescriptionPDF(pres, settings);
+      const activeSettings = await getLatestSettings(settings);
+      const doc = generateA4PrescriptionPDF(pres, activeSettings);
       doc.save(`Prescription_${pres.patient_name.replace(/\s+/g, "_")}_${pres.date}.pdf`);
     } catch (err: any) {
       console.error(err);
